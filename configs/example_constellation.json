@@ -1,0 +1,54 @@
+{
+  "constellation": {
+    "name": "Example LEO Constellation",
+    "pattern": "walker_delta",
+    "parameters": {
+      "total_satellites": 24,
+      "planes": 3,
+      "phasing": 1,
+      "altitude_km": 550.0,
+      "inclination_deg": 53.0
+    }
+  },
+  "ground_stations": [
+    {
+      "id": "GS_Seattle",
+      "latitude": 47.6,
+      "longitude": -122.3,
+      "altitude_km": 0.0,
+      "min_elevation_deg": 10.0
+    },
+    {
+      "id": "GS_London",
+      "latitude": 51.5,
+      "longitude": -0.1,
+      "altitude_km": 0.0,
+      "min_elevation_deg": 10.0
+    },
+    {
+      "id": "GS_Tokyo",
+      "latitude": 35.7,
+      "longitude": 139.7,
+      "altitude_km": 0.0,
+      "min_elevation_deg": 10.0
+    },
+    {
+      "id": "GS_Sydney",
+      "latitude": -33.9,
+      "longitude": 151.2,
+      "altitude_km": 0.0,
+      "min_elevation_deg": 10.0
+    },
+    {
+      "id": "GS_SaoPaulo",
+      "latitude": -23.5,
+      "longitude": -46.6,
+      "altitude_km": 0.0,
+      "min_elevation_deg": 10.0
+    }
+  ],
+  "simulation": {
+    "duration_seconds": 3600,
+    "time_step_seconds": 60
+  }
+}
