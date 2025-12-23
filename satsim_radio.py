@@ -3,6 +3,7 @@
 Satellite Constellation Radio Link Simulator - Combined Version
 Merges observer-centric accuracy with vectorized performance
 Supports QGIS CSV export with WKT geometry
+jhorta
 """
 
 import argparse
@@ -262,6 +263,50 @@ COMMS_PAYLOADS = {
     }
 }
 
+# --- VISUALIZATION SETTINGS ---
+# Centralized color and transparency settings for easy customization
+
+VISUALIZATION_SETTINGS = {
+    # Earth visualization (3D orbit view)
+    'earth': {
+        'ocean_color': '#1E90FF',      # Dodger blue
+        'ocean_alpha': 0.3,            # Transparency (0=invisible, 1=opaque)
+    },
+    
+    # Continent visualization
+    'continents': {
+        'fill_color': '#00FF00',       # Bright green land (was #90EE90)
+        'edge_color': '#2F4F2F',       # Dark green borders
+        'alpha': 1.0,                  # Fully opaque (was 0.6)
+        'edge_width': 0.5,             # Border line width (was 0.3)
+    },
+    
+    # Satellite markers
+    'satellites': {
+        'color': 'red',                # Satellite marker color
+        'size': 50,                    # Marker size
+        'edge_color': 'white',         # Marker edge color
+        'edge_width': 0.5,             # Marker edge width
+    },
+    
+    # Coverage beams/footprints
+    'beams': {
+        'color': 'yellow',             # Coverage circle color
+        'alpha': 0.2,                  # Transparency
+        'line_width': 2,               # Circle line width
+    },
+    
+    # Orbital trails
+    'trails': {
+        'orbit_color': 'red',          # Trail color in orbit view
+        'orbit_alpha': 0.3,            # Trail transparency in orbit view
+        'orbit_width': 0.5,            # Trail line width in orbit view
+        'sky_color': 'blue',           # Trail color in sky view
+        'sky_alpha': 0.2,              # Trail transparency in sky view
+        'sky_width': 1,                # Trail line width in sky view
+    }
+}
+
 
 # --- PHYSICS ENGINE ---
 
@@ -408,6 +453,193 @@ def generate_walker_delta_tles(num_sats, num_planes, inclination, altitude_km, p
             sat_id += 1
     
     return tles
+
+
+# --- EARTH VISUALIZATION HELPERS ---
+
+def draw_continents_on_sphere(ax, rotation_deg=0):
+    """Draw realistic continent outlines using Natural Earth coastline data
+    
+    Args:
+        ax: matplotlib 3D axis
+        rotation_deg: Rotation angle in degrees (for Earth rotation)
+    """
+    import json
+    import os
+    
+    earth_radius = 6378.137
+    coastline_file = "coastline.json"
+    
+    # Check if we have downloaded coastline data
+    if os.path.exists(coastline_file):
+        try:
+            with open(coastline_file, 'r') as f:
+                data = json.load(f)
+            
+            # Draw each coastline feature
+            for feature in data['features']:
+                geom = feature['geometry']
+                
+                if geom['type'] == 'LineString':
+                    coords = geom['coordinates']
+                    draw_coastline_segment(ax, coords, rotation_deg, earth_radius)
+                    
+                elif geom['type'] == 'MultiLineString':
+                    # Draw each segment
+                    for segment in geom['coordinates']:
+                        draw_coastline_segment(ax, segment, rotation_deg, earth_radius)
+            
+            return True
+            
+        except Exception as e:
+            print(f"⚠️  Error reading coastline data: {e}")
+            print("   Delete coastline.json and re-run to download fresh data")
+            return False
+    else:
+        # Download the data
+        import urllib.request
+        print("🌍 Downloading Natural Earth coastline data...")
+        url = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_coastline.geojson"
+        try:
+            urllib.request.urlretrieve(url, coastline_file)
+            print("✅ Coastline data downloaded")
+            # Recursive call to draw with newly downloaded data
+            return draw_continents_on_sphere(ax, rotation_deg)
+        except Exception as e:
+            print(f"❌ Download failed: {e}")
+            return False
+
+
+def draw_coastline_segment(ax, coords, rotation_deg, earth_radius):
+    """Draw a single coastline segment on the 3D sphere as filled polygon
+    
+    Args:
+        ax: matplotlib 3D axis
+        coords: List of [lon, lat] coordinate pairs
+        rotation_deg: Earth rotation angle
+        earth_radius: Earth radius in km
+    """
+    if len(coords) < 3:  # Need at least 3 points for a polygon
+        return
+    
+    # Reduce points for performance - keep every Nth point
+    step = max(1, len(coords) // 100)  # Maximum 100 points per segment
+    coords = coords[::step]
+    
+    # Extract and convert coordinates
+    lons, lats = zip(*coords)
+    lons = np.array(lons) + rotation_deg  # Apply Earth rotation
+    lats = np.array(lats)
+    
+    # Convert to radians
+    lat_rad = np.radians(lats)
+    lon_rad = np.radians(lons)
+    
+    # Draw continents well above ocean surface to ensure visibility
+    continent_radius = earth_radius * 1.01  # 1% larger radius (more visible)
+    
+    # Convert to 3D Cartesian coordinates
+    x = continent_radius * np.cos(lat_rad) * np.cos(lon_rad)
+    y = continent_radius * np.cos(lat_rad) * np.sin(lon_rad)
+    z = continent_radius * np.sin(lat_rad)
+    
+    # Create filled polygon for land mass
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+    verts = [list(zip(x, y, z))]
+    
+    # Draw as both filled polygon AND outline for visibility
+    poly = Poly3DCollection(verts, 
+                           alpha=VISUALIZATION_SETTINGS['continents']['alpha'], 
+                           facecolor=VISUALIZATION_SETTINGS['continents']['fill_color'],
+                           edgecolor=VISUALIZATION_SETTINGS['continents']['edge_color'],
+                           linewidth=VISUALIZATION_SETTINGS['continents']['edge_width'],
+                           zsort='average')
+    ax.add_collection3d(poly)
+    
+    # Also draw as a simple line for debugging
+    ax.plot(x, y, z, color='yellow', linewidth=2, alpha=1.0)
+
+
+def calculate_coverage_footprint(sat_alt_km, min_elev_deg):
+    """Calculate the radius of coverage footprint on Earth surface
+    
+    Args:
+        sat_alt_km: Satellite altitude above Earth surface (km)
+        min_elev_deg: Minimum elevation angle (degrees)
+                     0° = horizon, 90° = directly overhead
+    
+    Returns:
+        Coverage radius on Earth surface (km)
+    """
+    earth_radius = 6378.137  # km
+    
+    # Convert min elevation to radians
+    elev_rad = np.radians(min_elev_deg)
+    
+    # Satellite distance from Earth center
+    r_sat = earth_radius + sat_alt_km
+    
+    # Earth central angle using correct geometry:
+    # cos(lambda) = (R / r_sat) * sin(elev)
+    # where lambda is the Earth central angle from nadir to edge of coverage
+    cos_lambda = (earth_radius / r_sat) * np.sin(elev_rad)
+    
+    # Clip to valid range to avoid numerical errors
+    cos_lambda = np.clip(cos_lambda, -1.0, 1.0)
+    
+    lambda_central = np.arccos(cos_lambda)
+    
+    # Coverage radius on Earth surface
+    coverage_radius = earth_radius * lambda_central
+    
+    return coverage_radius
+
+
+def draw_coverage_circle_on_sphere(ax, lat_deg, lon_deg, radius_km, color=None, alpha=None):
+    """Draw a coverage circle on the 3D Earth sphere - returns line object"""
+    if color is None:
+        color = VISUALIZATION_SETTINGS['beams']['color']
+    if alpha is None:
+        alpha = VISUALIZATION_SETTINGS['beams']['alpha']
+    
+    earth_radius = 6378.137  # km
+    
+    # Convert to radians
+    lat_rad = np.radians(lat_deg)
+    lon_rad = np.radians(lon_deg)
+    
+    # Angular radius
+    ang_radius = radius_km / earth_radius
+    
+    # Create circle points around the subsatellite point
+    num_points = 50
+    angles = np.linspace(0, 2*np.pi, num_points)
+    
+    circle_lats = []
+    circle_lons = []
+    
+    for angle in angles:
+        # Use spherical geometry to find points at distance ang_radius
+        lat_new = np.arcsin(np.sin(lat_rad) * np.cos(ang_radius) + 
+                           np.cos(lat_rad) * np.sin(ang_radius) * np.cos(angle))
+        
+        lon_new = lon_rad + np.arctan2(np.sin(angle) * np.sin(ang_radius) * np.cos(lat_rad),
+                                        np.cos(ang_radius) - np.sin(lat_rad) * np.sin(lat_new))
+        
+        circle_lats.append(lat_new)
+        circle_lons.append(lon_new)
+    
+    # Convert to Cartesian coordinates
+    circle_lats = np.array(circle_lats)
+    circle_lons = np.array(circle_lons)
+    
+    x = earth_radius * np.cos(circle_lats) * np.cos(circle_lons)
+    y = earth_radius * np.cos(circle_lats) * np.sin(circle_lons)
+    z = earth_radius * np.sin(circle_lats)
+    
+    # Plot the circle and return the line object
+    line, = ax.plot(x, y, z, color=color, alpha=alpha, linewidth=2)
+    return line
 
 
 # --- HEATMAP MODE (VECTORIZED) ---
@@ -665,7 +897,10 @@ def view_sky(args):
         if args.trails:
             for sat_name, data in trail_data.items():
                 if len(data['az']) > 1:
-                    line, = ax.plot(data['az'], data['alt'], 'b-', alpha=0.2, linewidth=1)
+                    line, = ax.plot(data['az'], data['alt'], 
+                                   color=VISUALIZATION_SETTINGS['trails']['sky_color'], 
+                                   alpha=VISUALIZATION_SETTINGS['trails']['sky_alpha'], 
+                                   linewidth=VISUALIZATION_SETTINGS['trails']['sky_width'])
                     trail_lines.append(line)
         
         # Calculate connectivity percentage
@@ -846,55 +1081,181 @@ def view_orbit(args):
     fig = plt.figure(figsize=(12, 10))
     ax = fig.add_subplot(111, projection='3d')
     
-    # Earth sphere
-    u, v = np.mgrid[0:2*np.pi:50j, 0:np.pi:25j]
+    # Earth sphere - draw once (will be static)
+    u, v = np.mgrid[0:2*np.pi:100j, 0:np.pi:50j]
     x = 6378.137 * np.cos(u) * np.sin(v)
     y = 6378.137 * np.sin(u) * np.sin(v)
     z = 6378.137 * np.cos(v)
-    ax.plot_surface(x, y, z, color='lightblue', alpha=0.3)
+    
+    # Draw base Earth sphere (ocean) - solid surface without wireframe
+    ocean_surface = ax.plot_surface(x, y, z, 
+                   color=VISUALIZATION_SETTINGS['earth']['ocean_color'], 
+                   alpha=VISUALIZATION_SETTINGS['earth']['ocean_alpha'],
+                   linewidth=0,
+                   antialiased=False,
+                   edgecolor='none',
+                   rcount=50,
+                   ccount=50,
+                   shade=False,
+                   zorder=-1)  # Draw ocean behind everything
+    
+    print(f"🌊 Ocean rendered: color={VISUALIZATION_SETTINGS['earth']['ocean_color']}, alpha={VISUALIZATION_SETTINGS['earth']['ocean_alpha']}")
     
     walker_suffix = f"walker_{int(inc)}_{args.sats}_{args.planes}"
     max_range = args.altitude + 6378.137
     
-    # Initialize scatter and trail storage
-    scatters = [ax.scatter([], [], [], c='red', s=30, marker='o') for _ in sats]
+    # Calculate coverage radius if beams are enabled
+    coverage_radius = None
+    if args.beams:
+        min_elev = getattr(args, 'min_elev', 10.0)
+        coverage_radius = calculate_coverage_footprint(args.altitude, min_elev)
+        print(f"🎯 Coverage radius: {coverage_radius:.1f} km (min elev: {min_elev}°)")
+    
+    # Initialize satellites with initial positions (prevents blinking)
+    initial_positions = []
+    for sat in sats:
+        pos = sat.at(t0).position.km
+        initial_positions.append(pos)
+    
+    # Create scatter plots with initial positions - bright visible satellites
+    scatters = []
+    for pos in initial_positions:
+        scatter = ax.scatter([pos[0]], [pos[1]], [pos[2]], 
+                            c=VISUALIZATION_SETTINGS['satellites']['color'], 
+                            s=VISUALIZATION_SETTINGS['satellites']['size'], 
+                            marker='o', 
+                            edgecolors=VISUALIZATION_SETTINGS['satellites']['edge_color'], 
+                            linewidths=VISUALIZATION_SETTINGS['satellites']['edge_width'])
+        scatters.append(scatter)
+    
     trail_lines = []
+    beam_circles = []
+    continent_artists = []  # Store continent polygons for redrawing
     if args.trails:
         trail_data = [{'x': [], 'y': [], 'z': []} for _ in sats]
     
+    # Rotation angle for Earth (eastward = positive longitude change)
+    rotation_angle = [0.0]  # Use list to make it mutable in nested function
+    
+    # Draw initial continents if --map is enabled
+    if args.map:
+        print("🌍 Drawing continents...")
+        collections_before = len(ax.collections)
+        lines_before = len(ax.lines)
+        success = draw_continents_on_sphere(ax, rotation_angle[0])
+        collections_after = len(ax.collections)
+        lines_after = len(ax.lines)
+        new_collections = ax.collections[collections_before:]
+        new_lines = ax.lines[lines_before:]
+        continent_artists.extend(new_collections)
+        continent_artists.extend(new_lines)
+        print(f"   Added {collections_after - collections_before} continent polygons and {lines_after - lines_before} lines")
+        if new_collections:
+            sample = new_collections[0]
+            print(f"   Sample polygon: facecolor={sample.get_facecolor()}, alpha={sample.get_alpha()}")
+    
+    print(f"🚀 Starting animation with {len(sats)} satellites...")
+    
     def update(frame):
-        t = ts.utc(t0.utc_datetime() + timedelta(minutes=frame * 2))
+        nonlocal continent_artists
         
-        for idx, sat in enumerate(sats):
-            pos = sat.at(t).position.km
-            scatters[idx]._offsets3d = ([pos[0]], [pos[1]], [pos[2]])
+        try:
+            t = ts.utc(t0.utc_datetime() + timedelta(minutes=frame * 2))
+            
+            # Clear and redraw continents with Earth rotation every frame
+            if args.map:
+                # Remove old continent polygons and lines
+                for artist in continent_artists:
+                    try:
+                        artist.remove()
+                    except (ValueError, AttributeError):
+                        pass  # Already removed or invalid
+                
+                # Clear the list completely
+                continent_artists = []
+                
+                # Store count before drawing continents
+                collections_before = len(ax.collections)
+                lines_before = len(ax.lines)
+                
+                # Earth rotates eastward: ~360°/24h = 15°/hour = 0.5°/2min
+                rotation_angle[0] = frame * 0.5
+                
+                # Redraw continents at new rotation
+                draw_continents_on_sphere(ax, rotation_angle[0])
+                
+                # Store only the NEW collections and lines added
+                new_collections = ax.collections[collections_before:]
+                new_lines = ax.lines[lines_before:]
+                continent_artists.extend(new_collections)
+                continent_artists.extend(new_lines)
+            
+            # Update satellites - remove old and redraw at new positions
+            for scatter in scatters:
+                scatter.remove()
+            scatters.clear()
+            
+            for idx, sat in enumerate(sats):
+                pos = sat.at(t).position.km
+                # Redraw satellite at new position
+                scatter = ax.scatter([pos[0]], [pos[1]], [pos[2]], 
+                                    c=VISUALIZATION_SETTINGS['satellites']['color'], 
+                                    s=VISUALIZATION_SETTINGS['satellites']['size'], 
+                                    marker='o', 
+                                    edgecolors=VISUALIZATION_SETTINGS['satellites']['edge_color'], 
+                                    linewidths=VISUALIZATION_SETTINGS['satellites']['edge_width'])
+                scatters.append(scatter)
+                
+                if args.trails:
+                    trail_data[idx]['x'].append(pos[0])
+                    trail_data[idx]['y'].append(pos[1])
+                    trail_data[idx]['z'].append(pos[2])
+                    
+                    # Keep trail length reasonable
+                    if len(trail_data[idx]['x']) > 50:
+                        trail_data[idx]['x'].pop(0)
+                        trail_data[idx]['y'].pop(0)
+                        trail_data[idx]['z'].pop(0)
+            
+            # Redraw trails
+            for line in trail_lines:
+                line.remove()
+            trail_lines.clear()
             
             if args.trails:
-                trail_data[idx]['x'].append(pos[0])
-                trail_data[idx]['y'].append(pos[1])
-                trail_data[idx]['z'].append(pos[2])
-                
-                # Keep trail length reasonable
-                if len(trail_data[idx]['x']) > 50:
-                    trail_data[idx]['x'].pop(0)
-                    trail_data[idx]['y'].pop(0)
-                    trail_data[idx]['z'].pop(0)
+                for idx in range(len(sats)):
+                    if len(trail_data[idx]['x']) > 1:
+                        line, = ax.plot(trail_data[idx]['x'], trail_data[idx]['y'], 
+                                        trail_data[idx]['z'], 
+                                        color=VISUALIZATION_SETTINGS['trails']['orbit_color'], 
+                                        alpha=VISUALIZATION_SETTINGS['trails']['orbit_alpha'], 
+                                        linewidth=VISUALIZATION_SETTINGS['trails']['orbit_width'])
+                        trail_lines.append(line)
+            
+            # Draw coverage beams
+            for circle in beam_circles:
+                circle.remove()
+            beam_circles.clear()
+            
+            if args.beams and coverage_radius:
+                for sat in sats:
+                    geo = wgs84.subpoint(sat.at(t))
+                    lat = geo.latitude.degrees
+                    lon = geo.longitude.degrees
+                    
+                    # Draw coverage circle (continents rotate, beams stay with satellite ground track)
+                    circle = draw_coverage_circle_on_sphere(ax, lat, lon, coverage_radius)
+                    beam_circles.append(circle)
+            
+            ax.set_title(f"Orbital View | {walker_suffix} | T+{frame*2} min")
+            
+            return scatters
         
-        # Redraw trails
-        for line in trail_lines:
-            line.remove()
-        trail_lines.clear()
-        
-        if args.trails:
-            for idx in range(len(sats)):
-                if len(trail_data[idx]['x']) > 1:
-                    line, = ax.plot(trail_data[idx]['x'], trail_data[idx]['y'], 
-                                    trail_data[idx]['z'], 'r-', alpha=0.3, linewidth=0.5)
-                    trail_lines.append(line)
-        
-        ax.set_title(f"Orbital View | {walker_suffix} | T+{frame*2} min")
-        
-        return scatters
+        except Exception as e:
+            print(f"❌ Error in frame {frame}: {e}")
+            import traceback
+            traceback.print_exc()
+            return scatters
     
     ax.set_xlabel('X (km)')
     ax.set_ylabel('Y (km)')
@@ -903,16 +1264,34 @@ def view_orbit(args):
     ax.set_ylim([-max_range, max_range])
     ax.set_zlim([-max_range, max_range])
     
-    frames = 180  # 6 hours at 2 min/frame
+    # Calculate frames based on duration (2 minutes per frame)
+    frames = args.duration // 2  # 2 minutes per frame
+    duration_hours = args.duration / 60
+    print(f"ℹ️  Rendering {frames} frames ({duration_hours:.1f} hours simulation)")
+    
     anim = FuncAnimation(fig, update, frames=frames, interval=50, blit=False)
     
     if args.save:
         filename = f"orbit_{walker_suffix}.gif"
         writer = PillowWriter(fps=10)
-        anim.save(filename, writer=writer)
-        print(f"💾 Saved: {filename}")
-    
-    plt.show()
+        print(f"💾 Saving animation to {filename} ({frames} frames)...")
+        
+        # Progress callback
+        def progress_callback(current_frame, total_frames):
+            if current_frame % 5 == 0 or current_frame == total_frames - 1:
+                pct = (current_frame + 1) / total_frames * 100
+                print(f"   Progress: {current_frame + 1}/{total_frames} ({pct:.0f}%)")
+        
+        anim.save(filename, writer=writer, progress_callback=progress_callback)
+        print(f"✅ Saved: {filename}")
+    else:
+        # Check if display is available
+        import os
+        if not os.environ.get('DISPLAY'):
+            print("⚠️  No display available. Use --save to export as GIF.")
+            print(f"   Example: python satsim_radio.py orbit --sats {args.sats} --planes {args.planes} --inc {int(inc)} --alt {int(args.altitude)} --beams --save")
+        else:
+            plt.show()
 
 
 # --- TRACK VIEW (GROUND TRACK) ---
@@ -931,7 +1310,17 @@ def view_track(args):
     tles = generate_walker_delta_tles(args.sats, args.planes, inc, args.altitude, args.phasing)
     sats = [EarthSatellite(line1, line2, name, ts) for name, line1, line2 in tles]
 
-    fig, ax = plt.subplots(figsize=(16, 8))    # Plot tracks
+    fig, ax = plt.subplots(figsize=(16, 8))
+    
+    # Add world map background if --map is enabled
+    if args.map:
+        earth_texture = load_earth_texture()
+        if earth_texture is not None:
+            # Display Earth texture as background (Mercator projection)
+            ax.imshow(earth_texture, extent=[-180, 180, -90, 90], 
+                     aspect='auto', alpha=0.6, zorder=0)
+    
+    # Plot tracks
     colors = plt.cm.tab20(np.linspace(0, 1, args.planes))
     
     for idx, sat in enumerate(sats):
@@ -943,13 +1332,13 @@ def view_track(args):
             lons.append(geo.longitude.degrees)
         
         plane_idx = idx // (args.sats // args.planes)
-        ax.plot(lons, lats, color=colors[plane_idx], alpha=0.6, linewidth=0.8)
+        ax.plot(lons, lats, color=colors[plane_idx], alpha=0.8, linewidth=1.2, zorder=1)
     
     ax.set_xlim([-180, 180])
     ax.set_ylim([-90, 90])
     ax.set_xlabel('Longitude (°)')
     ax.set_ylabel('Latitude (°)')
-    ax.grid(True, alpha=0.3)
+    ax.grid(True, alpha=0.3, zorder=2)
     
     walker_suffix = f"walker_{int(inc)}_{args.sats}_{args.planes}"
     ax.set_title(f"Ground Tracks | {walker_suffix}")
@@ -960,7 +1349,14 @@ def view_track(args):
         print(f"💾 Saved: {filename}")
     
     plt.tight_layout()
-    plt.show()
+    
+    # Check if display is available
+    import os
+    if not args.save and not os.environ.get('DISPLAY'):
+        print("⚠️  No display available. Use --save to export as PNG.")
+        print(f"   Example: python satsim_radio.py track --sats {args.sats} --planes {args.planes} --inc {int(inc)} --alt {int(args.altitude)} --save")
+    elif not args.save:
+        plt.show()
 
 
 # --- MAIN CLI ---
@@ -1010,6 +1406,10 @@ def main():
     orbit_parser.add_argument('--inclination', type=float, default=87.4)
     orbit_parser.add_argument('--sso', action='store_true')
     orbit_parser.add_argument('--trails', action='store_true', help='Draw orbital trails')
+    orbit_parser.add_argument('--map', action='store_true', help='Show Earth with NASA texture')
+    orbit_parser.add_argument('--beams', action='store_true', help='Show satellite coverage beams')
+    orbit_parser.add_argument('--min-elev', type=float, default=10.0, help='Minimum elevation angle (degrees)')
+    orbit_parser.add_argument('--duration', type=int, default=360, help='Simulation duration in minutes (default: 360 = 6 hours)')
     orbit_parser.add_argument('--save', action='store_true', help='Save to file')
     
     # Track mode
@@ -1021,6 +1421,7 @@ def main():
     track_parser.add_argument('--inclination', type=float, default=87.4)
     track_parser.add_argument('--sso', action='store_true')
     track_parser.add_argument('--duration', type=int, default=3600)
+    track_parser.add_argument('--map', action='store_true', help='Show world map background (Mercator projection)')
     track_parser.add_argument('--save', action='store_true', help='Save to file')
     
     args = parser.parse_args()
