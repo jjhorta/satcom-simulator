@@ -71,18 +71,19 @@ Generate a sky view from Lisbon with 12 satellites using AIS payload:
 
 ### Analysis Modes Overview
 
-**The simulator provides three complementary analysis modes:**
+**The simulator provides four complementary analysis modes:**
 
 | Mode | Purpose | Speed | Accuracy | Best For |
 |------|---------|-------|----------|----------|
 | **heatmap** | Global geometric coverage | Fast | Geometric only | Constellation design, coverage patterns |
 | **sky** | Point-specific link budget | Medium | Full RF analysis | Service validation, specific locations |
+| **route** | Path-specific coverage | Medium | Full RF analysis | Maritime/Arctic route validation |
 | **orbit** | 3D visualization + dashboard | Slow | Visual + metrics | Presentations, design review |
 
-⚠️ **Important**: `heatmap` and `sky` modes use different coverage criteria:
+⚠️ **Important**: `heatmap` and `sky`/`route` modes use different coverage criteria:
 - **heatmap**: Shows if satellites are geometrically visible above minimum elevation (ignores link budget)
-- **sky**: Shows if RF link actually works (includes SNR, weather, power budget)
-- **Result**: Heatmap will show ≥ coverage % compared to sky mode for the same location
+- **sky/route**: Shows if RF link actually works (includes SNR, weather, power budget)
+- **Result**: Heatmap will show ≥ coverage % compared to sky/route mode for the same location
 
 ---
 
@@ -134,7 +135,33 @@ Generate a sky view from Lisbon with 12 satellites using AIS payload:
 
 ---
 
-### 4. 3D Orbital Visualization + Engineering Dashboard
+### 4. Route-Specific Coverage Analysis
+```bash
+# Analyze North Atlantic shipping corridor (Titan Corridor)
+./run.sh route --route titan_corridor --comms vdes --sats 24 --planes 4 --inc 53 --alt 550 --bidi --min-elev 10
+
+# Arctic Northern Sea Route analysis with strict elevation
+./run.sh route --route borealis_run --comms mss --sats 24 --planes 4 --inc 97 --alt 600 --bidi --sso --min-elev 35
+
+# Pacific Dragon Path with extended duration
+./run.sh route --route dragon_path --comms ais --sats 12 --planes 3 --inc 53 --alt 550 --bidi --duration 7200
+
+# Test all available routes (sea routes):
+#   - titan_corridor (North Atlantic)
+#   - dragon_path (Pacific)
+#   - silk_vein (Indian Ocean)
+#   - roaring_passage (Southern Ocean)
+# Arctic routes:
+#   - borealis_run (Northern Sea Route)
+#   - franklin_maze (Northwest Passage)
+#   - midnight_sun_arc (Transpolar)
+```
+**Output**: `route_<name>_<comms>_walker_<inc>_<sats>_<planes>.csv` + summary statistics  
+**Use case**: Maritime service validation, shipping route SLA verification, Arctic operations planning
+
+---
+
+### 5. 3D Orbital Visualization + Engineering Dashboard
 ```bash
 # AIS coverage from Gibraltar (clear weather, downlink only)
 ./run.sh sky --location gibraltar --comms ais --weather clear --save
@@ -158,7 +185,7 @@ Generate a sky view from Lisbon with 12 satellites using AIS payload:
 ./run.sh sky --coverage all --comms 5g --weather rain --bidi --save --sats 66 --planes 6
 ```
 
-### 4. 3D Orbital Visualization + Engineering Dashboard
+### 5. 3D Orbital Visualization + Engineering Dashboard
 ```bash
 # Complete constellation analysis with rotating Earth, coverage beams, and metrics
 ./run.sh orbit --sats 12 --planes 3 --inc 53 --alt 550 --beams --map --trails --min-elev 30 --save
@@ -178,11 +205,7 @@ Generate a sky view from Lisbon with 12 satellites using AIS payload:
 
 ---
 
-### 5. Constellation Design Comparison
-```bash
-# Starlink-like (550km, 53° inclination)
-./run.sh sky --coverage all --comms starlink_ku --sats 66 --planes 6 --inc 53 --alt 550 --save --bidi
-### 5. Constellation Design Comparison
+### 6. Constellation Design Comparison
 ```bash
 # Starlink-like (550km, 53° inclination)
 ./run.sh heatmap --sats 66 --planes 6 --inc 53 --alt 550 --res 5.0
@@ -199,7 +222,7 @@ Generate a sky view from Lisbon with 12 satellites using AIS payload:
 
 ---
 
-### 6. Visual Options
+### 7. Visual Options
 ```bash
 # Sky view with satellite trails (observer perspective)
 ./run.sh sky --location strait_of_hormuz --trails --save --frames 400

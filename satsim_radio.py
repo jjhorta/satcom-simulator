@@ -987,6 +987,59 @@ def view_sky(args):
     p = COMMS_PAYLOADS[args.comms]
     mode = "Bidirectional" if args.bidi else "Downlink Only"
     
+    # Check if running in headless mode (no display)
+    no_display = getattr(args, 'no_display', False)
+    min_elev = getattr(args, 'min_elev', 10.0)
+    
+    if no_display:
+        # Headless mode: just compute connectivity without animation
+        connectivity_frames = []
+        frames = args.duration // args.speed
+        
+        for frame in range(frames):
+            t = ts.utc(t0.utc_datetime() + timedelta(seconds=frame * args.speed))
+            has_connection = False
+            
+            for sat in sats:
+                topo = (sat - observer).at(t)
+                alt, az, dist = topo.altaz()
+                
+                if alt.degrees > min_elev:
+                    dist_km = dist.km
+                    
+                    # Downlink
+                    dl_margin, dl_snr, rain_loss = calculate_generic_link(
+                        dist_km, alt.degrees, p['dl_freq'], p['bw'],
+                        p['sat_p_tx'], p['sat_g_tx'], p['gnd_g_rx'], p['gnd_nf'],
+                        p['req_snr_dl'], args.weather
+                    )
+                    
+                    # Uplink
+                    if args.bidi:
+                        ul_margin, ul_snr, _ = calculate_generic_link(
+                            dist_km, alt.degrees, p['ul_freq'], p['bw'],
+                            p['gnd_p_tx'], p['gnd_g_tx'], p['sat_g_rx'], p['sat_nf'],
+                            p['req_snr_ul'], args.weather
+                        )
+                        connected = (dl_margin >= 0) and (ul_margin >= 0)
+                    else:
+                        connected = dl_margin >= 0
+                    
+                    if connected:
+                        has_connection = True
+                        break
+            
+            connectivity_frames.append(has_connection)
+        
+        # Return connectivity stats
+        final_connectivity = (sum(connectivity_frames) / len(connectivity_frames)) * 100.0 if connectivity_frames else 0.0
+        return {
+            'location': loc_name,
+            'latitude': lat,
+            'longitude': lon,
+            'connectivity_pct': final_connectivity
+        }
+    
     # Setup figure with dashboard
     fig = plt.figure(figsize=(12, 8))
     gs = fig.add_gridspec(2, 1, height_ratios=[4, 1], hspace=0.3)
@@ -1184,6 +1237,106 @@ def view_sky(args):
 
 
 # --- COVERAGE MODE (BATCH PROCESSING WITH CSV EXPORT) ---
+
+def run_route_analysis(args):
+    """Analyze coverage along a specific sea or arctic route without saving animations"""
+    
+    # Get the specific route
+    route_name = args.route
+    route_data = None
+    
+    if route_name in SEA_ROUTES:
+        route_data = SEA_ROUTES[route_name]
+        route_type = "Sea Route"
+    elif route_name in ARCTIC_ROUTES:
+        route_data = ARCTIC_ROUTES[route_name]
+        route_type = "Arctic Route"
+    else:
+        print(f"❌ Unknown route: {route_name}")
+        print(f"\nAvailable routes:")
+        print("  SEA ROUTES:", ", ".join(SEA_ROUTES.keys()))
+        print("  ARCTIC ROUTES:", ", ".join(ARCTIC_ROUTES.keys()))
+        return
+    
+    print(f"\n🛳️  ROUTE ANALYSIS: {route_name.upper()} ({route_type})")
+    print(f"   {len(route_data)} waypoints")
+    print("="*80)
+    
+    inc = calculate_sso_inclination(args.altitude) if args.sso else args.inclination
+    walker_suffix = f"walker_{int(inc)}_{args.sats}_{args.planes}"
+    
+    # Temporarily disable saving and plotting
+    original_save = args.save
+    args.save = False
+    
+    # Add no_display flag for headless computation
+    if not hasattr(args, 'no_display'):
+        args.no_display = True
+    
+    # Collect results
+    results = []
+    
+    for idx, (wp_name, lat, lon) in enumerate(route_data, 1):
+        print(f"\n[{idx}/{len(route_data)}] Analyzing: {wp_name} ({lat:.2f}°, {lon:.2f}°)")
+        
+        # Override location
+        args.location = f"{lat},{lon}"
+        
+        # Run skyview analysis (without display)
+        result = view_sky(args)
+        
+        if result:
+            results.append({
+                'waypoint': wp_name,
+                'sequence': idx,
+                'latitude': lat,
+                'longitude': lon,
+                'connectivity_pct': result['connectivity_pct']
+            })
+            print(f"   ✓ Connectivity: {result['connectivity_pct']:.1f}%")
+    
+    # Restore original save flag
+    args.save = original_save
+    
+    # Save results to CSV
+    csv_filename = f"route_{route_name}_{args.comms}_{walker_suffix}.csv"
+    
+    with open(csv_filename, 'w', newline='') as csvfile:
+        fieldnames = ['sequence', 'waypoint', 'latitude', 'longitude', 'connectivity_pct', 'wkt_geom']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        
+        for r in results:
+            writer.writerow({
+                'sequence': r['sequence'],
+                'waypoint': r['waypoint'],
+                'latitude': f"{r['latitude']:.4f}",
+                'longitude': f"{r['longitude']:.4f}",
+                'connectivity_pct': f"{r['connectivity_pct']:.1f}",
+                'wkt_geom': f"POINT({r['longitude']} {r['latitude']})"
+            })
+    
+    # Print summary
+    print("\n" + "="*80)
+    print(f"📊 ROUTE SUMMARY: {route_name.upper()}")
+    print("="*80)
+    
+    avg_connectivity = sum(r['connectivity_pct'] for r in results) / len(results) if results else 0
+    min_connectivity = min(r['connectivity_pct'] for r in results) if results else 0
+    max_connectivity = max(r['connectivity_pct'] for r in results) if results else 0
+    
+    # Find worst waypoint
+    worst = min(results, key=lambda x: x['connectivity_pct']) if results else None
+    
+    print(f"  Total Waypoints:        {len(results)}")
+    print(f"  Average Connectivity:   {avg_connectivity:.1f}%")
+    print(f"  Minimum Connectivity:   {min_connectivity:.1f}%")
+    print(f"  Maximum Connectivity:   {max_connectivity:.1f}%")
+    if worst:
+        print(f"  Worst Coverage Point:   {worst['waypoint']} ({worst['connectivity_pct']:.1f}%)")
+    print(f"\n💾 Results saved to: {csv_filename}")
+    print("="*80 + "\n")
+
 
 def run_coverage(args):
     """Batch coverage analysis across multiple locations with CSV export"""
@@ -1641,6 +1794,25 @@ def main():
     track_parser.add_argument('--map', action='store_true', help='Show world map background (Mercator projection)')
     track_parser.add_argument('--save', action='store_true', help='Save to file')
     
+    # Route mode - analyze specific route
+    route_parser = subparsers.add_parser('route', help='Analyze coverage along a specific sea/arctic route')
+    route_parser.add_argument('--route', required=True, 
+                             help='Route name - SEA: titan_corridor, dragon_path, silk_vein, roaring_passage | ARCTIC: borealis_run, franklin_maze, midnight_sun_arc')
+    route_parser.add_argument('--comms', default='vdes', choices=COMMS_PAYLOADS.keys())
+    route_parser.add_argument('--weather', default='clear', choices=WEATHER_SCENARIOS.keys())
+    route_parser.add_argument('--sats', type=int, default=66)
+    route_parser.add_argument('--planes', type=int, default=6)
+    route_parser.add_argument('--altitude', type=float, default=600.0)
+    route_parser.add_argument('--phasing', type=int, default=1)
+    route_parser.add_argument('--inclination', type=float, default=87.4)
+    route_parser.add_argument('--sso', action='store_true', help='Use SSO inclination')
+    route_parser.add_argument('--bidi', action='store_true', help='Calculate bidirectional links')
+    route_parser.add_argument('--duration', type=int, default=3600)
+    route_parser.add_argument('--speed', type=int, default=60)
+    route_parser.add_argument('--min-elev', type=float, default=10.0, help='Minimum elevation angle (degrees)')
+    route_parser.add_argument('--trails', action='store_true', help='Draw satellite trails in animations')
+    route_parser.add_argument('--save', action='store_true', help='Save individual waypoint animations (default: False)')
+    
     args = parser.parse_args()
     
     if not args.mode:
@@ -1658,6 +1830,8 @@ def main():
         view_orbit(args)
     elif args.mode == 'track':
         view_track(args)
+    elif args.mode == 'route':
+        run_route_analysis(args)
 
 
 if __name__ == "__main__":
