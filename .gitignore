@@ -1,10 +1,11 @@
 old
-n
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+*.gif
+*.png
 
 # Distribution / packaging
 build/

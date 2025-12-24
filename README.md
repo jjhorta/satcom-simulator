@@ -69,7 +69,72 @@ Generate a sky view from Lisbon with 12 satellites using AIS payload:
 
 ## 💡 Usage Examples
 
-### 1. Single Location Analysis
+### Analysis Modes Overview
+
+**The simulator provides three complementary analysis modes:**
+
+| Mode | Purpose | Speed | Accuracy | Best For |
+|------|---------|-------|----------|----------|
+| **heatmap** | Global geometric coverage | Fast | Geometric only | Constellation design, coverage patterns |
+| **sky** | Point-specific link budget | Medium | Full RF analysis | Service validation, specific locations |
+| **orbit** | 3D visualization + dashboard | Slow | Visual + metrics | Presentations, design review |
+
+⚠️ **Important**: `heatmap` and `sky` modes use different coverage criteria:
+- **heatmap**: Shows if satellites are geometrically visible above minimum elevation (ignores link budget)
+- **sky**: Shows if RF link actually works (includes SNR, weather, power budget)
+- **Result**: Heatmap will show ≥ coverage % compared to sky mode for the same location
+
+---
+
+### 1. Global Coverage Heatmap
+```bash
+# Fast global analysis - geometric visibility only
+./run.sh heatmap --sats 12 --planes 3 --inc 53 --alt 550 --res 5.0 --min-elev 10
+
+# High-resolution heatmap with stricter elevation (slower)
+./run.sh heatmap --sats 66 --planes 6 --inc 87 --alt 1200 --res 1.0 --min-elev 25
+
+# Sun-synchronous orbit at specific altitude
+./run.sh heatmap --sats 24 --planes 4 --alt 600 --sso --res 5.0
+```
+**Output**: `heatmap_<comms>_walker_<inc>_<sats>_<planes>.csv` + `.png`  
+**Use case**: Quick constellation design comparison, coverage gap identification
+
+---
+
+### 2. Single Location Link Budget Analysis
+```bash
+# AIS coverage from Gibraltar (clear weather, downlink only)
+./run.sh sky --location gibraltar --comms ais --weather clear --save
+
+# Starlink Ku-band from North Pole with bidirectional link
+./run.sh sky --location nuuk --comms starlink_ku --weather storm --bidi --save --inc 53 --alt 550
+```
+**Output**: Animated GIF with real-time link budget dashboard  
+**Use case**: Service validation, worst-case weather scenarios
+
+---
+
+### 3. Batch Coverage Analysis (Multiple Locations)
+```bash
+# Test all port locations (default)
+./run.sh sky --coverage --comms vdes --weather clear --bidi --save --sats 24 --planes 3
+
+# Test only sea route waypoints
+./run.sh sky --coverage sea --comms vdes --weather clear --save
+
+# Test only Arctic routes
+./run.sh sky --coverage arctic --comms mss --weather clear --bidi --save
+
+# Test everything (ports + sea routes + Arctic)
+./run.sh sky --coverage all --comms 5g --weather rain --bidi --save --sats 66 --planes 6
+```
+**Output**: `coverage_<type>_<comms>_walker_<inc>_<sats>_<planes>.csv`  
+**Use case**: Service area validation, SLA verification
+
+---
+
+### 4. 3D Orbital Visualization + Engineering Dashboard
 ```bash
 # AIS coverage from Gibraltar (clear weather, downlink only)
 ./run.sh sky --location gibraltar --comms ais --weather clear --save
@@ -93,28 +158,57 @@ Generate a sky view from Lisbon with 12 satellites using AIS payload:
 ./run.sh sky --coverage all --comms 5g --weather rain --bidi --save --sats 66 --planes 6
 ```
 
-### 3. Constellation Design Comparison
+### 4. 3D Orbital Visualization + Engineering Dashboard
+```bash
+# Complete constellation analysis with rotating Earth, coverage beams, and metrics
+./run.sh orbit --sats 12 --planes 3 --inc 53 --alt 550 --beams --map --trails --min-elev 30 --save
+
+# Fast preview without continents or beams
+./run.sh orbit --sats 66 --planes 6 --inc 87 --alt 1200 --duration 120
+```
+**Output**: Animated GIF + comprehensive engineering dashboard (shown on startup)  
+**Dashboard includes**:
+- Orbital mechanics (period, velocity, orbits/day)
+- Coverage metrics (radius, area, revisit time)
+- Link budget basics (frequency, path loss)
+- Satellite lifetime & replacement rate
+- Launch planning (batch size, launches/year)
+
+**Use case**: Executive presentations, design review meetings
+
+---
+
+### 5. Constellation Design Comparison
 ```bash
 # Starlink-like (550km, 53° inclination)
 ./run.sh sky --coverage all --comms starlink_ku --sats 66 --planes 6 --inc 53 --alt 550 --save --bidi
+### 5. Constellation Design Comparison
+```bash
+# Starlink-like (550km, 53° inclination)
+./run.sh heatmap --sats 66 --planes 6 --inc 53 --alt 550 --res 5.0
+./run.sh sky --coverage all --comms starlink_ku --sats 66 --planes 6 --inc 53 --alt 550 --save --bidi
 
 # OneWeb-like (1200km, 87.9° polar)
+./run.sh heatmap --sats 48 --planes 6 --inc 87.9 --alt 1200 --res 5.0
 ./run.sh sky --coverage all --comms 5g --sats 48 --planes 6 --inc 87.9 --alt 1200 --save --bidi
 
 # Custom LEO (800km, 60° inclination)
+./run.sh heatmap --sats 36 --planes 4 --inc 60 --alt 800 --res 5.0
 ./run.sh sky --coverage arctic --comms vdes --sats 36 --planes 4 --inc 60 --alt 800 --save
 ```
 
-### 4. View Options
+---
+
+### 6. Visual Options
 ```bash
-# 3D orbital view
-./run.sh orbit --sats 12 --planes 3 --inc 53 --alt 560 --save
+# Sky view with satellite trails (observer perspective)
+./run.sh sky --location strait_of_hormuz --trails --save --frames 400
+
+# 3D orbital view with coverage beams and rotating continents
+./run.sh orbit --sats 24 --planes 3 --inc 53 --alt 560 --beams --map --trails --save --duration 180
 
 # Ground track view (Mercator projection)
 ./run.sh track --sats 24 --planes 3 --inc 87 --alt 1200 --save --frames 300
-
-# Sky view with satellite trails
-./run.sh sky --location strait_of_hormuz --trails --save --frames 400
 ```
 
 ---
@@ -251,12 +345,17 @@ This simulator calculates:
 ### Simulation Parameters
 | Parameter | Flag | Default | Description |
 |-----------|------|---------|-------------|
-| View Mode | `view` | - | `sky`, `orbit`, or `track` |
-| Location | `--location` | lisbon | Observer location (see list above) |
+| View Mode | `view` | - | `heatmap`, `sky`, `orbit`, or `track` |
+| Location | `--location` | lisbon | Observer location (sky mode only) |
 | Frames | `--frames` | 200 | Number of animation frames |
 | Speed | `--speed` | 30 | Simulation speed (seconds/frame) |
 | Trails | `--trails` | off | Show satellite trails |
-| Save | `--save` | off | Save to GIF file |
+| Save | `--save` | off | Save to GIF/PNG file |
+| Min Elevation | `--min-elev` | 10.0 | Minimum elevation angle (degrees) |
+| Duration | `--duration` | 360 | Simulation duration in minutes (orbit mode) |
+| Resolution | `--res` | 5.0 | Grid resolution in degrees (heatmap mode) |
+| Beams | `--beams` | off | Show coverage circles (orbit mode) |
+| Map | `--map` | off | Show rotating continents (orbit mode) |
 
 ### Communications Parameters
 | Parameter | Flag | Default | Options |

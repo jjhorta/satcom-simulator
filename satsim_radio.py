@@ -11,33 +11,28 @@ import sys
 import csv
 import numpy as np
 import matplotlib
+matplotlib.use('Agg')  # Set backend before importing pyplot to avoid font cache issues
+import os
+# Set matplotlib cache directory to a persistent location
+os.environ['MPLCONFIGDIR'] = os.path.expanduser('~/.cache/matplotlib')
 from datetime import timedelta
 import warnings
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from matplotlib.animation import FuncAnimation, PillowWriter
 from skyfield.api import EarthSatellite, load, wgs84
 from skyfield.framelib import itrs
-import matplotlib.font_manager as fm
 
 warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
 
 
 # --- FONT CONFIGURATION ---
 plt_font_family = 'sans-serif'
-plt_fonts = ['Noto Color Emoji','Symbola', 'DejaVu Sans', 'Bitstream Vera Sans', 'Noto Sans']
+plt_fonts = ['DejaVu Sans', 'Bitstream Vera Sans', 'Liberation Sans']
 
-try:
-    plt.rcParams['font.family'] = plt_font_family
-    plt.rcParams['font.sans-serif'] = plt_fonts
-    plt.rcParams['font.monospace'] = ['DejaVu Sans Mono', 'Symbola','Noto Color Emoji']
-except:
-    pass
-
-try:
-    fm.fontManager.__init__()
-except:
-    pass
+plt.rcParams['font.family'] = plt_font_family
+plt.rcParams['font.sans-serif'] = plt_fonts
 
 
 # --- CONSTANTS & LOCATIONS ---
@@ -292,7 +287,7 @@ VISUALIZATION_SETTINGS = {
     # Coverage beams/footprints
     'beams': {
         'color': 'yellow',             # Coverage circle color
-        'alpha': 0.2,                  # Transparency
+        'alpha': 0.6,                  # Transparency
         'line_width': 2,               # Circle line width
     },
     
@@ -579,24 +574,196 @@ def calculate_coverage_footprint(sat_alt_km, min_elev_deg):
     # Satellite distance from Earth center
     r_sat = earth_radius + sat_alt_km
     
-    # Earth central angle using correct geometry:
-    # cos(lambda) = (R / r_sat) * sin(elev)
-    # where lambda is the Earth central angle from nadir to edge of coverage
-    cos_lambda = (earth_radius / r_sat) * np.sin(elev_rad)
+    # Correct spherical geometry for coverage calculation:
+    # Using law of sines in the triangle: Earth center - Observer - Satellite
+    # The angle at Earth center (lambda) can be found from:
+    # sin(90° + elev) / r_sat = sin(lambda) / R
+    # 
+    # Alternatively, using the right triangle formed:
+    # The nadir angle (rho) from satellite is: rho = arcsin(R * cos(elev) / r_sat)
+    # The Earth central angle is: lambda = (90° - elev) - rho
     
-    # Clip to valid range to avoid numerical errors
-    cos_lambda = np.clip(cos_lambda, -1.0, 1.0)
+    # Nadir angle from satellite to horizon at minimum elevation
+    cos_elev = np.cos(elev_rad)
+    sin_rho = (earth_radius / r_sat) * cos_elev
     
-    lambda_central = np.arccos(cos_lambda)
+    # Clip to valid range
+    sin_rho = np.clip(sin_rho, -1.0, 1.0)
+    rho = np.arcsin(sin_rho)
     
-    # Coverage radius on Earth surface
+    # Earth central angle (from nadir to edge of coverage)
+    lambda_central = (np.pi/2 - elev_rad) - rho
+    
+    # Coverage radius on Earth surface (arc length)
     coverage_radius = earth_radius * lambda_central
     
     return coverage_radius
 
 
+def calculate_constellation_metrics(num_sats, num_planes, altitude_km, inclination_deg, min_elev_deg=10.0):
+    """Calculate comprehensive constellation metrics for engineering dashboard
+    
+    Returns dictionary with all key metrics
+    """
+    earth_radius = 6378.137  # km
+    earth_mu = 398600.4418  # km³/s² (Earth's gravitational parameter)
+    
+    # Orbital mechanics
+    r_orbit = earth_radius + altitude_km
+    orbital_period_sec = 2 * np.pi * np.sqrt(r_orbit**3 / earth_mu)
+    orbital_period_min = orbital_period_sec / 60
+    orbital_velocity = 2 * np.pi * r_orbit / orbital_period_sec  # km/s
+    
+    # Coverage calculations
+    coverage_radius_km = calculate_coverage_footprint(altitude_km, min_elev_deg)
+    coverage_area_km2 = np.pi * coverage_radius_km**2
+    earth_surface_area = 4 * np.pi * earth_radius**2
+    coverage_per_sat_pct = (coverage_area_km2 / earth_surface_area) * 100
+    
+    # Revisit time estimation (simplified - assumes uniform distribution)
+    # More satellites and planes = better revisit
+    orbital_periods_per_day = 1440 / orbital_period_min
+    max_gap_time_min = (360 / num_planes) * orbital_period_min  # Time between plane crossings
+    avg_revisit_time_min = max_gap_time_min / 2
+    
+    # Link budget basics
+    frequency_band = "Ku-band (12-18 GHz)"  # Common for LEO satcom
+    free_space_loss_db = 20 * np.log10(altitude_km) + 20 * np.log10(14e9) + 20 * np.log10(4 * np.pi / 3e8)  # At 14 GHz
+    
+    # Satellite lifetime - heavily dependent on altitude due to atmospheric drag
+    # Atmospheric density decreases exponentially with altitude
+    # Lower altitude = more drag = faster orbital decay = shorter lifetime
+    
+    if altitude_km < 300:
+        # Very low orbit - extreme drag, impractical for long-term constellation
+        satellite_lifetime_years = 0.5
+    elif altitude_km < 400:
+        # Low orbit (e.g., ISS at ~400km needs regular reboost)
+        # Starlink Gen1 at 340-550km: ~5 years
+        satellite_lifetime_years = 1.0 + (altitude_km - 300) * 0.04  # 1-5 years
+    elif altitude_km < 600:
+        # Medium-low orbit (most LEO constellations)
+        # Starlink at 550km: ~5 years, OneWeb at 1200km: 10+ years
+        satellite_lifetime_years = 5.0 + (altitude_km - 400) * 0.025  # 5-10 years
+    elif altitude_km < 1000:
+        # Higher LEO - reduced drag
+        satellite_lifetime_years = 10.0 + (altitude_km - 600) * 0.0125  # 10-15 years
+    else:
+        # Very high LEO / MEO - minimal drag, lifetime limited by component degradation
+        satellite_lifetime_years = min(15.0 + (altitude_km - 1000) * 0.005, 20.0)  # 15-20 years max
+    
+    first_deorbit_year = satellite_lifetime_years
+    replacement_rate_per_year = num_sats / satellite_lifetime_years
+    
+    # Launch planning
+    typical_batch_size = min(50, num_sats // 5)  # Assume max 50 per launch
+    if typical_batch_size < 1:
+        typical_batch_size = 1
+    total_launches_needed = int(np.ceil(num_sats / typical_batch_size))
+    launches_per_year_steady = max(1, int(np.ceil(replacement_rate_per_year / typical_batch_size)))
+    
+    return {
+        'constellation': {
+            'total_satellites': num_sats,
+            'num_planes': num_planes,
+            'sats_per_plane': num_sats // num_planes,
+            'altitude_km': altitude_km,
+            'inclination_deg': inclination_deg,
+        },
+        'orbital': {
+            'period_min': orbital_period_min,
+            'velocity_km_s': orbital_velocity,
+            'orbits_per_day': orbital_periods_per_day,
+        },
+        'coverage': {
+            'radius_km': coverage_radius_km,
+            'diameter_km': coverage_radius_km * 2,
+            'area_km2': coverage_area_km2,
+            'coverage_per_sat_pct': coverage_per_sat_pct,
+            'min_elevation_deg': min_elev_deg,
+            'avg_revisit_time_min': avg_revisit_time_min,
+            'max_gap_time_min': max_gap_time_min,
+        },
+        'link_budget': {
+            'frequency_band': frequency_band,
+            'free_space_loss_db': free_space_loss_db,
+            'slant_range_km': altitude_km / np.sin(np.radians(min_elev_deg)),
+        },
+        'lifetime': {
+            'satellite_lifetime_years': satellite_lifetime_years,
+            'first_deorbit_year': first_deorbit_year,
+            'replacement_rate_per_year': replacement_rate_per_year,
+            'batch_size': typical_batch_size,
+            'initial_launches': total_launches_needed,
+            'steady_state_launches_per_year': launches_per_year_steady,
+        }
+    }
+
+
+def print_constellation_dashboard(metrics):
+    """Print a formatted dashboard of constellation metrics"""
+    
+    print("\n" + "="*80)
+    print("  🛰️  SATELLITE CONSTELLATION ENGINEERING DASHBOARD  🛰️")
+    print("="*80)
+    
+    # Constellation Configuration
+    print("\n📡 CONSTELLATION CONFIGURATION")
+    print("-" * 80)
+    c = metrics['constellation']
+    print(f"  Total Satellites:     {c['total_satellites']:>6d}")
+    print(f"  Orbital Planes:       {c['num_planes']:>6d}")
+    print(f"  Sats per Plane:       {c['sats_per_plane']:>6d}")
+    print(f"  Altitude:             {c['altitude_km']:>6.0f} km")
+    print(f"  Inclination:          {c['inclination_deg']:>6.1f}°")
+    
+    # Orbital Mechanics
+    print("\n🌍 ORBITAL MECHANICS")
+    print("-" * 80)
+    o = metrics['orbital']
+    print(f"  Orbital Period:       {o['period_min']:>6.1f} minutes ({o['period_min']/60:.2f} hours)")
+    print(f"  Orbital Velocity:     {o['velocity_km_s']:>6.2f} km/s")
+    print(f"  Orbits per Day:       {o['orbits_per_day']:>6.1f}")
+    
+    # Coverage Analysis
+    print("\n📶 COVERAGE ANALYSIS")
+    print("-" * 80)
+    cov = metrics['coverage']
+    print(f"  Min Elevation Angle:  {cov['min_elevation_deg']:>6.1f}°")
+    print(f"  Coverage Radius:      {cov['radius_km']:>6.0f} km")
+    print(f"  Coverage Diameter:    {cov['diameter_km']:>6.0f} km")
+    print(f"  Coverage Area:        {cov['area_km2']:>6,.0f} km²")
+    print(f"  Earth Coverage/Sat:   {cov['coverage_per_sat_pct']:>6.2f}%")
+    print(f"  Avg Revisit Time:     {cov['avg_revisit_time_min']:>6.1f} minutes")
+    print(f"  Max Gap Time:         {cov['max_gap_time_min']:>6.1f} minutes")
+    
+    # Link Budget
+    print("\n📡 LINK BUDGET BASICS")
+    print("-" * 80)
+    lb = metrics['link_budget']
+    print(f"  Frequency Band:       {lb['frequency_band']}")
+    print(f"  Slant Range (min):    {lb['slant_range_km']:>6.0f} km")
+    print(f"  Free Space Loss:      {lb['free_space_loss_db']:>6.1f} dB (at 14 GHz)")
+    
+    # Lifetime & Deployment
+    print("\n🚀 LIFETIME & DEPLOYMENT")
+    print("-" * 80)
+    lt = metrics['lifetime']
+    print(f"  Satellite Lifetime:   {lt['satellite_lifetime_years']:>6.1f} years")
+    print(f"  First Deorbit:        Year {lt['first_deorbit_year']:.1f}")
+    print(f"  Replacement Rate:     {lt['replacement_rate_per_year']:>6.1f} satellites/year")
+    print(f"  Launch Batch Size:    {lt['batch_size']:>6d} satellites")
+    print(f"  Initial Launches:     {lt['initial_launches']:>6d} launches")
+    print(f"  Steady-State:         {lt['steady_state_launches_per_year']:>6d} launches/year")
+    
+    print("\n" + "="*80 + "\n")
+
+
+
+
+
 def draw_coverage_circle_on_sphere(ax, lat_deg, lon_deg, radius_km, color=None, alpha=None):
-    """Draw a coverage circle on the 3D Earth sphere - returns line object"""
+    """Draw a coverage circle on the 3D Earth sphere - returns tuple of (line, polygon)"""
     if color is None:
         color = VISUALIZATION_SETTINGS['beams']['color']
     if alpha is None:
@@ -637,9 +804,19 @@ def draw_coverage_circle_on_sphere(ax, lat_deg, lon_deg, radius_km, color=None, 
     y = earth_radius * np.cos(circle_lats) * np.sin(circle_lons)
     z = earth_radius * np.sin(circle_lats)
     
-    # Plot the circle and return the line object
-    line, = ax.plot(x, y, z, color=color, alpha=alpha, linewidth=2)
-    return line
+    # Plot the circle outline
+    line, = ax.plot(x, y, z, color=color, alpha=alpha, linewidth=2.5, zorder=10)
+    
+    # Create filled polygon on Earth's surface
+    verts = [list(zip(x, y, z))]
+    poly = Poly3DCollection(verts, 
+                           alpha=alpha * 0.5,  # More visible fill
+                           facecolor=color, 
+                           edgecolor='none',
+                           zorder=5)  # Draw above ocean but below outline
+    ax.add_collection3d(poly)
+    
+    return line, poly
 
 
 # --- HEATMAP MODE (VECTORIZED) ---
@@ -686,7 +863,27 @@ def run_heatmap(args):
     chunk_size = 5000
     
     R_earth = 6378.137
-    horizon_limit = R_earth / (R_earth + args.altitude)
+    r_sat = R_earth + args.altitude
+    
+    # Calculate minimum elevation angle threshold
+    min_elev = getattr(args, 'min_elev', 10.0)
+    elev_rad = np.radians(min_elev)
+    
+    # Proper elevation angle calculation:
+    # For a satellite at elevation E from observer's horizon:
+    # The angle rho from satellite to observer is: rho = arcsin(R * cos(E) / r_sat)
+    # The Earth central angle (from center) is: lambda = 90° - E - rho
+    # The cosine of angle between position vectors is: cos(lambda)
+    cos_elev = np.cos(elev_rad)
+    sin_rho = (R_earth / r_sat) * cos_elev
+    sin_rho = np.clip(sin_rho, -1.0, 1.0)
+    rho = np.arcsin(sin_rho)
+    lambda_angle = np.pi/2 - elev_rad - rho
+    min_cos_angle = np.cos(lambda_angle)
+    
+    print(f"🎯 Using minimum elevation: {min_elev}° (cos threshold: {min_cos_angle:.3f}, angle: {np.degrees(lambda_angle):.1f}°)")
+    print(f"⚠️  NOTE: Heatmap shows GEOMETRIC coverage (elevation angle only)")
+    print(f"   For accurate link budget analysis, use 'sky' mode for specific locations")
     
     print(f"⏱️  Simulating {steps} timesteps over {steps*12} minutes...")
     
@@ -706,9 +903,9 @@ def run_heatmap(args):
             # Cosine similarity (dot product of unit vectors)
             cos_sim = np.dot(chunk_obs, sat_norm.T)  # (chunk_size, N_sats)
             
-            # Check if any satellite is visible (above horizon)
+            # Check if any satellite is visible (above minimum elevation)
             max_cos = np.max(cos_sim, axis=1)
-            visible_mask = max_cos > horizon_limit
+            visible_mask = max_cos > min_cos_angle
             
             # Accumulate coverage
             coverage_counts[i:end] += visible_mask.astype(np.int32)
@@ -1075,6 +1272,17 @@ def view_orbit(args):
     else:
         inc = args.inclination
     
+    # Calculate and display constellation metrics dashboard
+    min_elev = getattr(args, 'min_elev', 10.0)
+    metrics = calculate_constellation_metrics(
+        num_sats=args.sats,
+        num_planes=args.planes,
+        altitude_km=args.altitude,
+        inclination_deg=inc,
+        min_elev_deg=min_elev
+    )
+    print_constellation_dashboard(metrics)
+    
     tles = generate_walker_delta_tles(args.sats, args.planes, inc, args.altitude, args.phasing)
     sats = [EarthSatellite(line1, line2, name, ts) for name, line1, line2 in tles]
 
@@ -1109,7 +1317,9 @@ def view_orbit(args):
     if args.beams:
         min_elev = getattr(args, 'min_elev', 10.0)
         coverage_radius = calculate_coverage_footprint(args.altitude, min_elev)
-        print(f"🎯 Coverage radius: {coverage_radius:.1f} km (min elev: {min_elev}°)")
+        coverage_diameter = coverage_radius * 2
+        print(f"🎯 Coverage: radius={coverage_radius:.1f} km, diameter={coverage_diameter:.1f} km")
+        print(f"   Min elevation: {min_elev}°, Altitude: {args.altitude} km")
     
     # Initialize satellites with initial positions (prevents blinking)
     initial_positions = []
@@ -1130,6 +1340,7 @@ def view_orbit(args):
     
     trail_lines = []
     beam_circles = []
+    beam_polygons = []  # Store coverage polygons
     continent_artists = []  # Store continent polygons for redrawing
     if args.trails:
         trail_data = [{'x': [], 'y': [], 'z': []} for _ in sats]
@@ -1237,15 +1448,20 @@ def view_orbit(args):
                 circle.remove()
             beam_circles.clear()
             
+            for poly in beam_polygons:
+                poly.remove()
+            beam_polygons.clear()
+            
             if args.beams and coverage_radius:
                 for sat in sats:
                     geo = wgs84.subpoint(sat.at(t))
                     lat = geo.latitude.degrees
                     lon = geo.longitude.degrees
                     
-                    # Draw coverage circle (continents rotate, beams stay with satellite ground track)
-                    circle = draw_coverage_circle_on_sphere(ax, lat, lon, coverage_radius)
+                    # Draw coverage circle with filled polygon on Earth's surface
+                    circle, poly = draw_coverage_circle_on_sphere(ax, lat, lon, coverage_radius)
                     beam_circles.append(circle)
+                    beam_polygons.append(poly)
             
             ax.set_title(f"Orbital View | {walker_suffix} | T+{frame*2} min")
             
@@ -1396,6 +1612,7 @@ def main():
     heatmap_parser.add_argument('--sso', action='store_true')
     heatmap_parser.add_argument('--bidi', action='store_true')
     heatmap_parser.add_argument('--res', type=float, default=5.0, help='Grid resolution in degrees')
+    heatmap_parser.add_argument('--min-elev', type=float, default=10.0, help='Minimum elevation angle (degrees)')
     
     # Orbit mode
     orbit_parser = subparsers.add_parser('orbit', help='3D orbital view')
