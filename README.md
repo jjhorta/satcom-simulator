@@ -110,6 +110,9 @@ Generate a sky view from Lisbon with 12 satellites using AIS payload:
 
 # Starlink Ku-band from North Pole with bidirectional link
 ./run.sh sky --location nuuk --comms starlink_ku --weather storm --bidi --save --inc 53 --alt 550
+
+# High minimum elevation for better link quality
+./run.sh sky --location panama_canal --comms vdes --min-elev 30 --save
 ```
 **Output**: Animated GIF with real-time link budget dashboard  
 **Use case**: Service validation, worst-case weather scenarios
@@ -146,44 +149,19 @@ Generate a sky view from Lisbon with 12 satellites using AIS payload:
 # Pacific Dragon Path with extended duration
 ./run.sh route --route dragon_path --comms ais --sats 12 --planes 3 --inc 53 --alt 550 --bidi --duration 7200
 
-# Test all available routes (sea routes):
-#   - titan_corridor (North Atlantic)
-#   - dragon_path (Pacific)
-#   - silk_vein (Indian Ocean)
-#   - roaring_passage (Southern Ocean)
-# Arctic routes:
-#   - borealis_run (Northern Sea Route)
-#   - franklin_maze (Northwest Passage)
-#   - midnight_sun_arc (Transpolar)
+# Test all available routes:
+# Sea routes: titan_corridor, dragon_path, silk_vein, roaring_passage
+# Arctic routes: borealis_run, franklin_maze, midnight_sun_arc
 ```
 **Output**: `route_<name>_<comms>_walker_<inc>_<sats>_<planes>.csv` + summary statistics  
+**Features**:
+- Headless computation (no GIF generation by default)
+- Summary statistics (avg/min/max connectivity, worst waypoint)
+- CSV output with WKT geometry for QGIS import
+
 **Use case**: Maritime service validation, shipping route SLA verification, Arctic operations planning
 
 ---
-
-### 5. 3D Orbital Visualization + Engineering Dashboard
-```bash
-# AIS coverage from Gibraltar (clear weather, downlink only)
-./run.sh sky --location gibraltar --comms ais --weather clear --save
-
-# Starlink Ku-band from North Pole with bidirectional link
-./run.sh sky --location nuuk --comms starlink_ku --weather storm --bidi --save --inc 53 --alt 550
-```
-
-### 2. Global Coverage Analysis
-```bash
-# Test all port locations (default)
-./run.sh sky --coverage --comms vdes --weather clear --bidi --save --sats 24 --planes 3
-
-# Test only sea route waypoints
-./run.sh sky --coverage sea --comms vdes --weather clear --save
-
-# Test only Arctic routes
-./run.sh sky --coverage arctic --comms mss --weather clear --bidi --save
-
-# Test everything (ports + sea routes + Arctic)
-./run.sh sky --coverage all --comms 5g --weather rain --bidi --save --sats 66 --planes 6
-```
 
 ### 5. 3D Orbital Visualization + Engineering Dashboard
 ```bash
@@ -192,16 +170,24 @@ Generate a sky view from Lisbon with 12 satellites using AIS payload:
 
 # Fast preview without continents or beams
 ./run.sh orbit --sats 66 --planes 6 --inc 87 --alt 1200 --duration 120
+
+# Sun-synchronous constellation with coverage visualization
+./run.sh orbit --sats 24 --planes 4 --sso --alt 600 --beams --save
 ```
 **Output**: Animated GIF + comprehensive engineering dashboard (shown on startup)  
 **Dashboard includes**:
-- Orbital mechanics (period, velocity, orbits/day)
-- Coverage metrics (radius, area, revisit time)
-- Link budget basics (frequency, path loss)
-- Satellite lifetime & replacement rate
-- Launch planning (batch size, launches/year)
+- **Constellation Config**: satellites, planes, altitude, inclination, Walker designation
+- **Orbital Mechanics**: period, velocity, orbits/day
+- **Coverage Metrics**: radius (km), area (km²), revisit time, max gap time
+- **Link Budget Basics**: frequency band, slant range, free space path loss
+- **Lifetime & Deployment**: satellite lifetime (drag-based), replacement rate, launches/year, batch size
 
-**Use case**: Executive presentations, design review meetings
+**New Features**:
+- **Coverage beams**: Filled circles showing actual footprint on Earth's surface
+- **Rotating continents**: Earth rotation visualization with coastlines
+- **Physics-accurate**: Coverage radius based on altitude, curvature, and minimum elevation
+
+**Use case**: Executive presentations, design review meetings, constellation validation
 
 ---
 
