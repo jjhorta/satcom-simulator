@@ -950,7 +950,10 @@ def run_heatmap(args):
     plt.savefig(img_filename, dpi=150, bbox_inches='tight')
     print(f"💾 Saved: {img_filename}")
     
-    plt.show()
+    # Only show if not using Agg backend
+    if matplotlib.get_backend().lower() != 'agg':
+        plt.show()
+    plt.close()
 
 
 # --- SKY VIEW MODE (OBSERVER-CENTRIC WITH PRETTY DASHBOARD) ---
@@ -1224,7 +1227,11 @@ def view_sky(args):
         anim.save(gif_filename, writer=writer)
         print(f"💾 Saved: {gif_filename}")
     
-    plt.show()
+    # Only show if not using Agg backend
+    if matplotlib.get_backend().lower() != 'agg':
+        plt.show()
+    else:
+        plt.close()
     
     # Return connectivity stats
     final_connectivity = (sum(connectivity_frames) / len(connectivity_frames)) * 100.0 if connectivity_frames else 0.0
@@ -1653,12 +1660,18 @@ def view_orbit(args):
         
         anim.save(filename, writer=writer, progress_callback=progress_callback)
         print(f"✅ Saved: {filename}")
+        plt.close()
     else:
-        # Check if display is available
+        # Check if display is available and not using Agg backend
         import os
-        if not os.environ.get('DISPLAY'):
+        if matplotlib.get_backend().lower() == 'agg':
+            print("⚠️  Running with Agg backend (no display). Use --save to export as GIF.")
+            print(f"   Example: python satsim_radio.py orbit --sats {args.sats} --planes {args.planes} --inc {int(inc)} --alt {int(args.altitude)} --beams --save")
+            plt.close()
+        elif not os.environ.get('DISPLAY'):
             print("⚠️  No display available. Use --save to export as GIF.")
             print(f"   Example: python satsim_radio.py orbit --sats {args.sats} --planes {args.planes} --inc {int(inc)} --alt {int(args.altitude)} --beams --save")
+            plt.close()
         else:
             plt.show()
 
@@ -1719,11 +1732,17 @@ def view_track(args):
     
     plt.tight_layout()
     
-    # Check if display is available
+    # Check if display is available and not using Agg backend
     import os
-    if not args.save and not os.environ.get('DISPLAY'):
+    if matplotlib.get_backend().lower() == 'agg':
+        if not args.save:
+            print("⚠️  Running with Agg backend (no display). Use --save to export as PNG.")
+            print(f"   Example: python satsim_radio.py track --sats {args.sats} --planes {args.planes} --inc {int(inc)} --alt {int(args.altitude)} --save")
+        plt.close()
+    elif not args.save and not os.environ.get('DISPLAY'):
         print("⚠️  No display available. Use --save to export as PNG.")
         print(f"   Example: python satsim_radio.py track --sats {args.sats} --planes {args.planes} --inc {int(inc)} --alt {int(args.altitude)} --save")
+        plt.close()
     elif not args.save:
         plt.show()
 

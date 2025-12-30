@@ -100,14 +100,25 @@ organize_outputs() {
     echo -e "${BLUE}📁 Organizing outputs to: $OUTPUT_DIR${NC}"
     mkdir -p "$OUTPUT_DIR"
     
-    # Move all generated files
-    [ -f *.gif ] && mv *.gif "$OUTPUT_DIR/" 2>/dev/null
-    [ -f *.png ] && mv *.png "$OUTPUT_DIR/" 2>/dev/null
-    [ -f *.csv ] && mv *.csv "$OUTPUT_DIR/" 2>/dev/null
-    [ -f heatmap_*.csv ] && mv heatmap_*.csv "$OUTPUT_DIR/" 2>/dev/null
-    [ -f coverage_*.csv ] && mv coverage_*.csv "$OUTPUT_DIR/" 2>/dev/null
+    # Move all generated files (using proper globbing)
+    shopt -s nullglob  # Don't expand if no match
+    local files_moved=0
     
-    echo -e "${GREEN}✅ Files organized in: $OUTPUT_DIR${NC}"
+    for pattern in "*.gif" "*.png" "*.csv" "heatmap_*.csv" "coverage_*.csv"; do
+        for file in $pattern; do
+            if [ -f "$file" ]; then
+                mv "$file" "$OUTPUT_DIR/" 2>/dev/null && ((files_moved++))
+            fi
+        done
+    done
+    
+    shopt -u nullglob
+    
+    if [ $files_moved -gt 0 ]; then
+        echo -e "${GREEN}✅ Files organized in: $OUTPUT_DIR ($files_moved files moved)${NC}"
+    else
+        echo -e "${YELLOW}⚠️  No output files found to organize${NC}"
+    fi
 }
 
 # Run orbit view
