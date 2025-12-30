@@ -12,6 +12,12 @@ A comprehensive physics-based simulator for analyzing satellite constellation co
 - [Strategic Importance](#strategic-importance)
 - [Coverage Locations](#coverage-locations)
 - [Parameters Reference](#parameters-reference)
+- [Output Files](#output-files)
+- [Extra Scripts](#extra-scripts)
+- [Troubleshooting](#troubleshooting)
+- [References](#references)
+- [License](#license)
+- [Contributing](#contributing)
 
 ---
 
@@ -422,6 +428,118 @@ suez_canal,30.5852,32.3999,92.3
 
 ---
 
+## 🤖 Extra Scripts
+
+### Batch Simulation Script (`batch.sim.sh`)
+
+A powerful batch processing tool for running multiple simulation modes with organized output management.
+
+**Features:**
+- Modular view generation (orbit, track, coverage, heatmap, or all)
+- Automatic output organization into structured directories
+- Support for all constellation and payload parameters
+- Integrated virtual environment management
+
+**Usage:**
+```bash
+./batch.sim.sh <command> <name> [options]
+```
+
+**Commands:**
+- `orbit` - Generate 3D orbital view animation
+- `track` - Generate ground track visualization  
+- `coverage` - Run coverage analysis (sky views + CSV)
+- `heatmap` - Generate global coverage heatmap
+- `all` - Generate all views above
+
+**Examples:**
+```bash
+# Generate all views for a 66-sat SSO constellation
+./batch.sim.sh all MyConstellation --sats 66 --planes 6 --alt 600 --sso
+
+# Generate only heatmap for Starlink-like constellation
+./batch.sim.sh heatmap Starlink_Shell1 --sats 1584 --planes 72 --inc 53 --alt 550
+
+# Coverage analysis with storm weather
+./batch.sim.sh coverage Maritime_AIS --sats 60 --planes 6 --sso --comms ais --weather storm
+
+# Orbit view with trails and coverage beams
+./batch.sim.sh orbit Polar_Constellation --sats 24 --planes 4 --inc 87 --alt 800 --trails
+```
+
+**Output Organization:**
+All generated files (GIFs, CSVs, PNGs) are automatically organized into:
+```
+output_sims/<name>/
+├── orbit_*.gif
+├── track_*.gif
+├── coverage_*.csv
+└── heatmap_*.csv/png
+```
+
+---
+
+### Competition Analysis Script (`run_competition.sh`)
+
+Automated suite for running comprehensive competitive constellation analysis across multiple predefined scenarios.
+
+**Features:**
+- Batch execution of all predefined scenarios
+- Organized output structure for comparison analysis
+- Progress tracking with success/failure statistics
+- Color-coded console output for better readability
+
+**Predefined Scenarios:**
+- **AIS Legacy Competitors**: `ais_legacy_spire1`, `ais_legacy_spire2`, `ais_legacy_spire3`
+- **VDES Options**: `vdes_3planes`, `vdes_4planes`, `vdes_phase2`
+- **MSS Competitor**: `iridium`
+- **Weather Testing**: `storm_test`
+- **High Resolution**: `highres`
+
+**Usage:**
+```bash
+# Run all competitive analysis scenarios
+./run_competition.sh
+```
+
+**Output Structure:**
+Results are organized into categorized directories:
+```
+output_sims/
+├── 01_Competitor_Analysis/
+│   ├── Competitor_AIS_Legacy/
+│   └── Competitor_MSS_Iridium/
+├── 02_VDES_Options/
+│   ├── MyConstellation_OptionA/
+│   └── MyConstellation_OptionB/
+├── 03_Phase2_Expansion/
+│   └── MyConstellation_Phase2/
+├── 04_Weather_Testing/
+│   └── Storm_Test_Coverage/
+└── 05_High_Resolution/
+    └── HighRes_Global_Coverage/
+```
+
+**Workflow:**
+1. Script prompts for confirmation before starting
+2. Executes each scenario with all views (orbit, track, coverage, heatmap)
+3. Displays real-time progress with color-coded status
+4. Generates final summary with success/failure statistics
+
+**Use Cases:**
+- **Competitive Benchmarking**: Compare your constellation against existing systems (Iridium, Spire)
+- **Design Trade Studies**: Evaluate multiple constellation configurations side-by-side
+- **Weather Impact Analysis**: Assess performance degradation in adverse conditions
+- **Phase Planning**: Compare initial deployment vs. full constellation performance
+
+**Tips:**
+- Each full run generates ~100+ files across all scenarios
+- Estimated runtime: 10-30 minutes depending on hardware
+- Outputs are ready for QGIS import (CSV with WKT geometry)
+- Perfect for generating presentation materials or technical reports
+
+---
+
 ## 🐛 Troubleshooting
 
 ### Virtual Environment Issues
@@ -473,6 +591,6 @@ Contributions welcome! Areas of interest:
 
 ---
 
-**Last Updated**: November 2025  
-**Version**: 2.0  
+**Last Updated**: December 2025  
+**Version**: 2.1  
 **Author**: John Horta
