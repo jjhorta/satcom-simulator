@@ -302,6 +302,135 @@ VISUALIZATION_SETTINGS = {
     }
 }
 
+# --- TCO (TOTAL COST OF OWNERSHIP) CONFIGURATION ---
+# Based on real-world data:
+# - LusoSpace: 12-sat VDES constellation, ~15M EUR total (8U nanosats, rideshare)
+# - ICEYE: 60+ SAR sats, hundreds of millions total (not billions)
+# - SpaceX Transporter: $325k base for 50kg to SSO, $6.5k/kg additional
+
+TCO_CONFIG = {
+    # Satellite platform types (mass and cost)
+    'satellite_platforms': {
+        'nanosat': {
+            'typical_mass_kg': 12,
+            'unit_cost': 0.7,        # $0.7M per satellite (LusoSpace: ~€8-10M for 12 sats)
+            'description': 'Nanosat 8U CubeSat (10-20 kg, VDES/AIS)'
+        },
+        'microsat': {
+            'typical_mass_kg': 50,
+            'unit_cost': 2.5,        # $2.5M per satellite
+            'description': 'Microsat (25-100 kg)'
+        },
+        'smallsat': {
+            'typical_mass_kg': 150,
+            'unit_cost': 5.0,        # $5M per satellite (ICEYE SAR class)
+            'description': 'Smallsat (100-250 kg, SAR/optical)'
+        },
+        'mediumsat': {
+            'typical_mass_kg': 500,
+            'unit_cost': 25.0,       # $25M per satellite
+            'description': 'Mediumsat (250-800 kg)'
+        },
+        'largesat': {
+            'typical_mass_kg': 2000,
+            'unit_cost': 100.0,      # $100M per satellite
+            'description': 'Largesat (800+ kg, GEO/complex)'
+        }
+    },
+    
+    # Payload type multipliers (affects satellite mass)
+    'payload_multipliers': {
+        'ais': 0.9,         # Minimal payload
+        'vdes': 1.0,        # Baseline (VDES = AIS + VHF data)
+        'gsm': 1.3,         # Heavier comms payload
+        '5g': 1.6,          # Complex phased array
+        'mss': 1.4,         # Mobile sat service
+        'starlink_ku': 1.5, # Ku-band phased array
+    },
+    
+    # Launch vehicle options (mass-based rideshare model)
+    'launch_vehicles': {
+        'rideshare': {
+            'base_cost': 0.325,          # $325k base for 50kg (SpaceX Transporter)
+            'cost_per_kg': 0.0065,       # $6.5k per additional kg
+            'max_payload_kg': 1500,
+            'typical_batch_size': 20,
+            'description': 'Rideshare (SpaceX Transporter, ~$325k+mass)'
+        },
+        'small_dedicated': {
+            'cost_per_launch': 7.5,      # $7.5M per launch
+            'max_payload_kg': 300,
+            'typical_batch_size': 5,
+            'description': 'Small dedicated (Rocket Lab Electron)'
+        },
+        'medium_dedicated': {
+            'cost_per_launch': 67.0,     # $67M per launch (Falcon 9)
+            'max_payload_kg': 15000,
+            'typical_batch_size': 50,
+            'description': 'Medium dedicated (Falcon 9)'
+        },
+        'heavy_dedicated': {
+            'cost_per_launch': 150.0,    # $150M per launch
+            'max_payload_kg': 50000,
+            'typical_batch_size': 100,
+            'description': 'Heavy dedicated (Falcon Heavy)'
+        }
+    },
+    
+    # Development costs (one-time, in millions USD)
+    'development': {
+        'initial_rd': 1.0,               # R&D and engineering (small nanosat programs leverage COTS)
+        'payload_development': 0.5,      # Payload development (VDES/AIS is mature, off-the-shelf)
+        'ground_segment': 1.0,           # Ground stations and control center (lean operations)
+    },
+    
+    # Operations costs
+    'operations': {
+        'ground_stations': {
+            'stations_needed_per_100_sats': 2,  # 2 stations for global coverage
+            'initial_capex': 0.4,        # $0.4M per ground station (lean setup with COTS)
+            'annual_opex': 0.15,         # $150k/year per station
+        },
+        'mission_control': {
+            'initial_capex': 0.5,        # $0.5M for control center (cloud-based, lean)
+            'annual_opex': 0.3,          # $300k/year operations
+        },
+        'network_operations': {
+            'cost_per_sat_per_year': 0.02,  # $20k/sat/year (data, licensing)
+        },
+        'staff': {
+            'engineers_per_100_sats': 8,     # ~8-10 engineers for 100 sats
+            'annual_cost_per_engineer': 0.15,  # $150k/year (including overhead)
+        },
+    },
+    
+    # Insurance costs (many small sat operators self-insure or skip)
+    'insurance': {
+        'launch_insurance_pct': 0.05,    # 5% of satellite + launch (lower for nanosats)
+        'annual_in_orbit_pct': 0.02,     # 2% of satellite value per year
+    },
+    
+    # Decommissioning costs
+    'decommissioning': {
+        'cost_per_satellite': 0.05,      # $50k per satellite deorbit (passive for LEO)
+        'regulatory_compliance': 0.2,    # $200k/year for compliance/licensing
+    },
+    
+    # Deployment modes (planes vs launches)
+    'deployment': {
+        'basic': {
+            'planes_per_launch': 1,      # Basic mode: 1 plane per launch (simple sats, no plane-change)
+            'propulsion_cost_per_sat': 0.0,  # No extra propulsion needed
+            'deployment_opex_factor': 1.0,   # Standard deployment time
+        },
+        'advanced': {
+            'planes_per_launch': 3,      # Advanced: 3 planes per launch (with propulsion/tug)
+            'propulsion_cost_per_sat': 0.15,  # $150k extra per sat for propulsion
+            'deployment_opex_factor': 1.5,    # 50% more deployment OPEX (longer drift)
+        }
+    }
+}
+
 
 # --- PHYSICS ENGINE ---
 
@@ -700,7 +829,306 @@ def calculate_constellation_metrics(num_sats, num_planes, altitude_km, inclinati
     }
 
 
-def print_constellation_dashboard(metrics, filename=None):
+def select_launch_vehicle(satellite_mass_kg, batch_size):
+    """Select appropriate launch vehicle based on satellite mass and batch size"""
+    total_mass = satellite_mass_kg * batch_size
+    
+    for name, specs in TCO_CONFIG['launch_vehicles'].items():
+        if total_mass <= specs['max_payload_kg']:
+            return name, specs
+    
+    # Default to heavy if too large
+    return 'heavy_dedicated', TCO_CONFIG['launch_vehicles']['heavy_dedicated']
+
+
+def estimate_satellite_mass(platform_type, payload_type):
+    """Estimate satellite mass based on platform and payload"""
+    platform = TCO_CONFIG['satellite_platforms'][platform_type]
+    base_mass = platform['typical_mass_kg']
+    
+    # Apply payload multiplier
+    multiplier = TCO_CONFIG['payload_multipliers'].get(payload_type, 1.0)
+    
+    return base_mass * multiplier
+
+
+def calculate_tco(num_sats, platform_type, payload_type, satellite_lifetime_years, 
+                 replacement_rate_per_year, mission_duration_years=15, num_planes=1, 
+                 deployment_mode='basic'):
+    """Calculate Total Cost of Ownership for satellite constellation
+    
+    Args:
+        num_sats: Total number of satellites
+        platform_type: Type of satellite platform
+        payload_type: Communication payload type
+        satellite_lifetime_years: Expected satellite lifetime
+        replacement_rate_per_year: Number of satellites to replace per year
+        mission_duration_years: Total mission duration for TCO calculation
+        num_planes: Number of orbital planes (affects launch count)
+        deployment_mode: 'basic' (1 plane/launch) or 'advanced' (multi-plane with propulsion)
+    """
+    
+    cfg = TCO_CONFIG
+    platform = cfg['satellite_platforms'][platform_type]
+    deployment = cfg['deployment'][deployment_mode]
+    
+    # Estimate satellite mass
+    sat_mass_kg = estimate_satellite_mass(platform_type, payload_type)
+    
+    # === INITIAL INVESTMENT (CAPEX) ===
+    
+    # 1. Development costs (one-time)
+    dev_costs = (
+        cfg['development']['initial_rd'] +
+        cfg['development']['payload_development'] +
+        cfg['development']['ground_segment']
+    )
+    
+    # 2. Initial satellite production (include propulsion costs for advanced deployment)
+    base_sat_cost = num_sats * platform['unit_cost']
+    propulsion_cost = num_sats * deployment['propulsion_cost_per_sat']
+    initial_sat_cost = base_sat_cost + propulsion_cost
+    
+    # 3. Initial launches (based on planes and deployment mode)
+    # Calculate number of launches needed based on planes
+    planes_per_launch = deployment['planes_per_launch']
+    num_launches_for_planes = int(np.ceil(num_planes / planes_per_launch))
+    
+    # Select launch vehicle based on actual constellation mass
+    # Use smaller batch size for initial vehicle selection to avoid over-sizing
+    estimated_sats_per_launch = max(4, int(np.ceil(num_sats / num_launches_for_planes)))
+    launch_vehicle_name, launch_specs = select_launch_vehicle(sat_mass_kg, estimated_sats_per_launch)
+    
+    # Calculate actual satellites per launch
+    max_sats_per_launch = launch_specs['typical_batch_size']
+    actual_sats_per_launch = int(np.ceil(num_sats / num_launches_for_planes))
+    
+    # Ensure we don't exceed vehicle capacity
+    if actual_sats_per_launch > max_sats_per_launch:
+        # Need more launches due to vehicle capacity
+        num_launches_for_capacity = int(np.ceil(num_sats / max_sats_per_launch))
+        num_initial_launches = max(num_launches_for_planes, num_launches_for_capacity)
+        actual_sats_per_launch = int(np.ceil(num_sats / num_initial_launches))
+    else:
+        num_initial_launches = num_launches_for_planes
+    
+    # Calculate launch cost based on actual payload
+    if 'base_cost' in launch_specs:  # Mass-based rideshare pricing
+        total_mass_per_launch = sat_mass_kg * actual_sats_per_launch
+        cost_per_launch = launch_specs['base_cost'] + (total_mass_per_launch * launch_specs['cost_per_kg'])
+        initial_launch_cost = num_initial_launches * cost_per_launch
+    else:  # Fixed cost for dedicated launches
+        initial_launch_cost = num_initial_launches * launch_specs['cost_per_launch']
+    
+    # 4. Ground infrastructure
+    num_ground_stations = int(np.ceil((num_sats / 100) * cfg['operations']['ground_stations']['stations_needed_per_100_sats']))
+    ground_station_capex = num_ground_stations * cfg['operations']['ground_stations']['initial_capex']
+    mission_control_capex = cfg['operations']['mission_control']['initial_capex']
+    
+    # 5. Launch insurance
+    launch_insurance = (initial_sat_cost + initial_launch_cost) * cfg['insurance']['launch_insurance_pct']
+    
+    total_capex = (
+        dev_costs +
+        initial_sat_cost +
+        initial_launch_cost +
+        ground_station_capex +
+        mission_control_capex +
+        launch_insurance
+    )
+    
+    # === RECURRING COSTS (OPEX per year) ===
+    
+    # 1. Satellite replacement
+    replacement_sat_cost = replacement_rate_per_year * platform['unit_cost']
+    
+    # 2. Replacement launches
+    actual_replacement_sats_per_launch = min(actual_sats_per_launch, replacement_rate_per_year)
+    num_replacement_launches = max(1, int(np.ceil(replacement_rate_per_year / actual_sats_per_launch)))
+    
+    # Calculate replacement launch cost (mass-based for rideshare, fixed for dedicated)
+    if 'base_cost' in launch_specs:  # Mass-based rideshare pricing
+        total_mass_per_launch = sat_mass_kg * actual_replacement_sats_per_launch
+        cost_per_launch = launch_specs['base_cost'] + (total_mass_per_launch * launch_specs['cost_per_kg'])
+        replacement_launch_cost = num_replacement_launches * cost_per_launch
+    else:  # Fixed cost for dedicated launches
+        replacement_launch_cost = num_replacement_launches * launch_specs['cost_per_launch']
+    
+    # 3. Ground operations
+    ground_station_opex = num_ground_stations * cfg['operations']['ground_stations']['annual_opex']
+    mission_control_opex = cfg['operations']['mission_control']['annual_opex']
+    network_opex = num_sats * cfg['operations']['network_operations']['cost_per_sat_per_year']
+    
+    # 4. Staff
+    num_engineers = int(np.ceil((num_sats / 100) * cfg['operations']['staff']['engineers_per_100_sats']))
+    staff_cost = num_engineers * cfg['operations']['staff']['annual_cost_per_engineer']
+    
+    # 5. Insurance (in-orbit)
+    in_orbit_insurance = num_sats * platform['unit_cost'] * cfg['insurance']['annual_in_orbit_pct']
+    
+    # 6. Decommissioning
+    decommissioning = (replacement_rate_per_year * cfg['decommissioning']['cost_per_satellite'] + 
+                      cfg['decommissioning']['regulatory_compliance'])
+    
+    annual_opex = (
+        replacement_sat_cost +
+        replacement_launch_cost +
+        ground_station_opex +
+        mission_control_opex +
+        network_opex +
+        staff_cost +
+        in_orbit_insurance +
+        decommissioning
+    )
+    
+    # === TOTAL COST OF OWNERSHIP ===
+    
+    total_opex_over_mission = annual_opex * mission_duration_years
+    total_tco = total_capex + total_opex_over_mission
+    
+    # Cost per satellite per year
+    cost_per_sat_per_year = total_tco / (num_sats * mission_duration_years)
+    
+    return {
+        'mission_parameters': {
+            'num_satellites': num_sats,
+            'num_planes': num_planes,
+            'deployment_mode': deployment_mode,
+            'platform_type': platform_type,
+            'platform_description': platform['description'],
+            'satellite_mass_kg': sat_mass_kg,
+            'payload_type': payload_type,
+            'satellite_lifetime_years': satellite_lifetime_years,
+            'replacement_rate_per_year': replacement_rate_per_year,
+            'mission_duration_years': mission_duration_years,
+        },
+        'launch_config': {
+            'launch_vehicle': launch_vehicle_name,
+            'launch_vehicle_description': launch_specs['description'],
+            'batch_size': actual_sats_per_launch,
+            'max_vehicle_capacity': max_sats_per_launch,
+            'planes_per_launch': planes_per_launch,
+            'initial_launches': num_initial_launches,
+            'annual_replacement_launches': num_replacement_launches,
+        },
+        'capex': {
+            'development': dev_costs,
+            'initial_satellites': initial_sat_cost,
+            'initial_launches': initial_launch_cost,
+            'ground_infrastructure': ground_station_capex + mission_control_capex,
+            'launch_insurance': launch_insurance,
+            'total': total_capex,
+        },
+        'annual_opex': {
+            'satellite_replacement': replacement_sat_cost,
+            'replacement_launches': replacement_launch_cost,
+            'ground_operations': ground_station_opex + mission_control_opex + network_opex,
+            'staff': staff_cost,
+            'insurance': in_orbit_insurance,
+            'decommissioning': decommissioning,
+            'total': annual_opex,
+        },
+        'total_costs': {
+            'total_capex': total_capex,
+            'total_opex': total_opex_over_mission,
+            'total_tco': total_tco,
+            'cost_per_sat_per_year': cost_per_sat_per_year,
+        },
+        'infrastructure': {
+            'ground_stations': num_ground_stations,
+            'engineers': num_engineers,
+        }
+    }
+
+
+def print_tco_analysis(tco_data, filename=None):
+    """Print formatted TCO analysis and optionally save to file"""
+    
+    lines = []
+    lines.append("\n" + "="*80)
+    lines.append("  💰 TOTAL COST OF OWNERSHIP (TCO) ANALYSIS 💰")
+    lines.append("="*80)
+    
+    # Mission Parameters
+    lines.append("\n📋 MISSION PARAMETERS")
+    lines.append("-" * 80)
+    mp = tco_data['mission_parameters']
+    lines.append(f"  Constellation Size:       {mp['num_satellites']} satellites in {mp['num_planes']} planes")
+    lines.append(f"  Deployment Mode:          {mp['deployment_mode'].title()}")
+    lines.append(f"  Platform Type:            {mp['platform_description']}")
+    lines.append(f"  Satellite Mass:           {mp['satellite_mass_kg']:.0f} kg")
+    lines.append(f"  Payload:                  {mp['payload_type'].upper()}")
+    lines.append(f"  Satellite Lifetime:       {mp['satellite_lifetime_years']:.1f} years")
+    lines.append(f"  Replacement Rate:         {mp['replacement_rate_per_year']:.1f} sats/year")
+    lines.append(f"  Mission Duration:         {mp['mission_duration_years']} years")
+    
+    # Launch Configuration
+    lines.append("\n🚀 LAUNCH CONFIGURATION")
+    lines.append("-" * 80)
+    lc = tco_data['launch_config']
+    lines.append(f"  Launch Vehicle:           {lc['launch_vehicle_description']}")
+    lines.append(f"  Satellites per Launch:    {lc['batch_size']}")
+    lines.append(f"  Planes per Launch:        {lc['planes_per_launch']}")
+    lines.append(f"  Initial Deployment:       {lc['initial_launches']} launches")
+    lines.append(f"  Steady-State:             {lc['annual_replacement_launches']} launches/year")
+    
+    # CAPEX Breakdown
+    lines.append("\n💵 INITIAL INVESTMENT (CAPEX)")
+    lines.append("-" * 80)
+    capex = tco_data['capex']
+    lines.append(f"  Development (R&D):        ${capex['development']:>8.1f}M")
+    lines.append(f"  Initial Satellites:       ${capex['initial_satellites']:>8.1f}M")
+    lines.append(f"  Initial Launches:         ${capex['initial_launches']:>8.1f}M")
+    lines.append(f"  Ground Infrastructure:    ${capex['ground_infrastructure']:>8.1f}M")
+    lines.append(f"  Launch Insurance:         ${capex['launch_insurance']:>8.1f}M")
+    lines.append(f"  {'─' * 35}")
+    lines.append(f"  TOTAL CAPEX:              ${capex['total']:>8.1f}M")
+    
+    # OPEX Breakdown (Annual)
+    lines.append("\n📅 RECURRING COSTS (OPEX per year)")
+    lines.append("-" * 80)
+    opex = tco_data['annual_opex']
+    lines.append(f"  Satellite Replacement:    ${opex['satellite_replacement']:>8.1f}M/year")
+    lines.append(f"  Replacement Launches:     ${opex['replacement_launches']:>8.1f}M/year")
+    lines.append(f"  Ground Operations:        ${opex['ground_operations']:>8.1f}M/year")
+    lines.append(f"  Staff:                    ${opex['staff']:>8.1f}M/year")
+    lines.append(f"  Insurance (In-Orbit):     ${opex['insurance']:>8.1f}M/year")
+    lines.append(f"  Decommissioning:          ${opex['decommissioning']:>8.1f}M/year")
+    lines.append(f"  {'─' * 35}")
+    lines.append(f"  TOTAL ANNUAL OPEX:        ${opex['total']:>8.1f}M/year")
+    
+    # Total TCO
+    lines.append("\n💰 TOTAL COST OF OWNERSHIP")
+    lines.append("-" * 80)
+    tc = tco_data['total_costs']
+    lines.append(f"  Total CAPEX:              ${tc['total_capex']:>8.1f}M")
+    lines.append(f"  Total OPEX ({mp['mission_duration_years']} years):     ${tc['total_opex']:>8.1f}M")
+    lines.append(f"  {'─' * 35}")
+    lines.append(f"  TOTAL TCO ({mp['mission_duration_years']} years):      ${tc['total_tco']:>8.1f}M")
+    lines.append(f"\n  Cost per Satellite/Year:  ${tc['cost_per_sat_per_year']:>8.3f}M")
+    
+    # Infrastructure
+    lines.append("\n🏗️  INFRASTRUCTURE REQUIREMENTS")
+    lines.append("-" * 80)
+    infra = tco_data['infrastructure']
+    lines.append(f"  Ground Stations:          {infra['ground_stations']}")
+    lines.append(f"  Engineering Staff:        {infra['engineers']} people")
+    
+    lines.append("\n" + "="*80 + "\n")
+    
+    # Print to console
+    tco_text = "\n".join(lines)
+    print(tco_text)
+    
+    # Save to file if filename provided
+    if filename:
+        output_file = f"{filename}.txt"
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(tco_text)
+        print(f"💾 TCO Analysis saved to: {output_file}")
+
+
+def print_constellation_dashboard(metrics, tco_data=None, filename=None):
     """Print a formatted dashboard of constellation metrics and optionally save to file
     
     Args:
@@ -762,6 +1190,17 @@ def print_constellation_dashboard(metrics, filename=None):
     lines.append(f"  Launch Batch Size:    {lt['batch_size']:>6d} satellites")
     lines.append(f"  Initial Launches:     {lt['initial_launches']:>6d} launches")
     lines.append(f"  Steady-State:         {lt['steady_state_launches_per_year']:>6d} launches/year")
+    
+    # Add TCO summary if provided
+    if tco_data:
+        lines.append("\n💰 ECONOMIC SUMMARY (TCO)")
+        lines.append("-" * 80)
+        tc = tco_data['total_costs']
+        opex = tco_data['annual_opex']
+        lines.append(f"  Initial Investment:       ${tco_data['capex']['total']:>8.1f}M")
+        lines.append(f"  Annual Operating Cost:    ${opex['total']:>8.1f}M/year")
+        lines.append(f"  Total TCO (15 years):     ${tc['total_tco']:>8.1f}M")
+        lines.append(f"  Cost per Sat/Year:        ${tc['cost_per_sat_per_year']:>8.3f}M")
     
     lines.append("\n" + "="*80 + "\n")
     
@@ -1460,10 +1899,31 @@ def view_orbit(args):
         min_elev_deg=min_elev
     )
     
+    # Calculate TCO analysis
+    platform_type = getattr(args, 'platform', 'smallsat')
+    payload_type = getattr(args, 'comms', 'vdes')
+    
+    tco_data = calculate_tco(
+        num_sats=args.sats,
+        platform_type=platform_type,
+        payload_type=payload_type,
+        satellite_lifetime_years=metrics['lifetime']['satellite_lifetime_years'],
+        replacement_rate_per_year=metrics['lifetime']['replacement_rate_per_year'],
+        mission_duration_years=15,
+        num_planes=args.planes,
+        deployment_mode='basic'  # Can be made configurable via CLI if needed
+    )
+    
     # Generate dashboard filename
     walker_suffix = f"walker_{int(inc)}_{args.sats}_{args.planes}"
     dashboard_filename = f"dashboard_{walker_suffix}"
-    print_constellation_dashboard(metrics, filename=dashboard_filename)
+    
+    # Print combined dashboard with TCO
+    print_constellation_dashboard(metrics, tco_data, filename=dashboard_filename)
+    
+    # Also save separate detailed TCO analysis
+    tco_filename = f"tco_{walker_suffix}"
+    print_tco_analysis(tco_data, filename=tco_filename)
     
     tles = generate_walker_delta_tles(args.sats, args.planes, inc, args.altitude, args.phasing)
     sats = [EarthSatellite(line1, line2, name, ts) for name, line1, line2 in tles]
@@ -1816,6 +2276,11 @@ def main():
     orbit_parser.add_argument('--phasing', type=int, default=1)
     orbit_parser.add_argument('--inclination', type=float, default=87.4)
     orbit_parser.add_argument('--sso', action='store_true')
+    orbit_parser.add_argument('--platform', default='smallsat', 
+                             choices=['nanosat', 'microsat', 'smallsat', 'mediumsat', 'largesat'],
+                             help='Satellite platform type (affects TCO calculation)')
+    orbit_parser.add_argument('--comms', default='vdes', choices=COMMS_PAYLOADS.keys(),
+                             help='Communications payload type')
     orbit_parser.add_argument('--trails', action='store_true', help='Draw orbital trails')
     orbit_parser.add_argument('--map', action='store_true', help='Show Earth with NASA texture')
     orbit_parser.add_argument('--beams', action='store_true', help='Show satellite coverage beams')
