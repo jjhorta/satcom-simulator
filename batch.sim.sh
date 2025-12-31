@@ -266,8 +266,8 @@ run_all() {
     fi
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}"
     
-    run_orbit "$NAME" $ARGS
-    run_track "$NAME" $ARGS
+    run_orbit "$NAME" $ARGS --map --trails
+    run_track "$NAME" $ARGS --map
     run_heatmap "$NAME" $ARGS
     #run_coverage "$NAME" $ARGS
     
@@ -316,7 +316,9 @@ declare -A SCENARIOS=(
     ["vdes_3planes"]="--sats 12 --planes 3 --inc 53.0 --altitude 600 --comms vdes --phasing 1"
     ["vdes_4planes"]="--sats 12 --planes 4 --inc 53.0 --altitude 600 --comms vdes --phasing 1"
     ["vdes_phase2"]="--sats 24 --planes 8 --inc 53.0 --altitude 600 --comms vdes --phasing 1"
-    ["storm_test"]="--sats 66 --planes 6 --sso --comms vdes --weather storm"
+    ["weather_test_clear"]="--sats 66 --planes 6 --sso --comms vdes --weather clear"
+    ["weather_test_tropical"]="--sats 66 --planes 6 --sso --comms vdes --weather tropical"
+    ["storm_test"]="--sats 66 --planes 6 --sso --comms vdes --weather storm --bidi"
     ["highres"]="--sats 66 --planes 6 --sso --comms vdes --res 2.0"
 )
 
@@ -328,6 +330,8 @@ declare -A SCENARIO_NAMES=(
     ["vdes_3planes"]="MyConstellation_OptionA"
     ["vdes_4planes"]="MyConstellation_OptionB"
     ["vdes_phase2"]="MyConstellation_Phase2"
+    ["weather_test_clear"]="Clear_Weather_Test"
+    ["weather_test_tropical"]="Tropical_Test_Coverage"
     ["storm_test"]="Storm_Test_Coverage"
     ["highres"]="HighRes_Global_Coverage"
 )
@@ -340,6 +344,8 @@ declare -A SCENARIO_CATEGORIES=(
     ["vdes_3planes"]="02_VDES_Options"
     ["vdes_4planes"]="02_VDES_Options"
     ["vdes_phase2"]="03_Phase2_Expansion"
+    ["weather_test_clear"]="04_Weather_Testing"
+    ["weather_test_tropical"]="04_Weather_Testing"
     ["storm_test"]="04_Weather_Testing"
     ["highres"]="05_High_Resolution"
 )
@@ -353,13 +359,17 @@ if [[ "$COMMAND" =~ ^(scenario|sc)$ ]]; then
         echo -e "${RED}❌ Error: Scenario key required${NC}"
         echo ""
         echo -e "${YELLOW}Available scenarios:${NC}"
-        echo "  ais_legacy     - Spire/exactEarth style AIS constellation (60 sats, SSO)"
-        echo "  iridium        - Iridium NEXT style MSS (66 sats, 86.4°, bidirectional)"
-        echo "  vdes_3planes   - Maritime VDES Option A (12 sats, 3 planes)"
-        echo "  vdes_4planes   - Maritime VDES Option B (12 sats, 4 planes)"
-        echo "  vdes_phase2    - Phase 2 Expansion (24 sats, 8 planes)"
-        echo "  storm_test     - Storm weather testing (66 sats, SSO)"
-        echo "  highres        - High-resolution heatmap (66 sats, SSO, 2° grid)"
+        echo "  ais_legacy_spire1       - Spire AIS constellation variant 1 (60 sats, SSO)"
+        echo "  ais_legacy_spire2       - Spire AIS constellation variant 2 (33 sats, 51.6°)"
+        echo "  ais_legacy_spire3       - Spire AIS constellation variant 3 (4 sats, 82°)"
+        echo "  iridium                 - Iridium NEXT style MSS (66 sats, 86.4°, bidirectional)"
+        echo "  vdes_3planes            - Maritime VDES Option A (12 sats, 3 planes)"
+        echo "  vdes_4planes            - Maritime VDES Option B (12 sats, 4 planes)"
+        echo "  vdes_phase2             - Phase 2 Expansion (24 sats, 8 planes)"
+        echo "  weather_test_clear      - Clear weather baseline (66 sats, SSO)"
+        echo "  weather_test_tropical   - Tropical weather testing (66 sats, SSO)"
+        echo "  storm_test              - Storm weather testing (66 sats, SSO, bidirectional)"
+        echo "  highres                 - High-resolution heatmap (66 sats, SSO, 2° grid)"
         echo ""
         echo -e "${YELLOW}Usage:${NC}"
         echo "  ./batch.sim.sh scenario <scenario_key> <view_type>"
@@ -368,9 +378,10 @@ if [[ "$COMMAND" =~ ^(scenario|sc)$ ]]; then
         echo -e "${YELLOW}View types:${NC} orbit, track, coverage, heatmap, all"
         echo ""
         echo -e "${YELLOW}Examples:${NC}"
-        echo "  ./batch.sim.sh scenario ais_legacy all"
+        echo "  ./batch.sim.sh scenario ais_legacy_spire1 all"
         echo "  ./batch.sim.sh sc iridium heatmap"
         echo "  ./batch.sim.sh scenario vdes_3planes orbit"
+        echo "  ./batch.sim.sh sc storm_test all"
         exit 1
     fi
     
@@ -461,10 +472,10 @@ FULL_ARGS="$DEFAULT_ARGS $ARGS"
 # Execute command
 case "$COMMAND" in
     orbit)
-        run_orbit "$NAME" $FULL_ARGS
+        run_orbit "$NAME" $FULL_ARGS --map --trails
         ;;
     track)
-        run_track "$NAME" $FULL_ARGS
+        run_track "$NAME" $FULL_ARGS --map
         ;;
     coverage)
         run_coverage "$NAME" $FULL_ARGS
@@ -498,7 +509,7 @@ esac
 # ./batch.sim.sh scenario vdes_3planes orbit
 # ./batch.sim.sh scenario vdes_4planes track
 # ./batch.sim.sh scenario vdes_phase2 coverage
-# ./batch.sim.sh scenario storm_test coverage
+# ./batch.sim.sh scenario weather_test coverage
 # ./batch.sim.sh scenario highres heatmap
 
 # Or use the short form 'sc':
@@ -511,5 +522,5 @@ esac
 # ./batch.sim.sh all "MyConstellation_OptionA" --sats 12 --planes 3 --inc 53.0 --altitude 600 --comms vdes --phasing 1
 # ./batch.sim.sh all "MyConstellation_OptionB" --sats 12 --planes 4 --inc 53.0 --altitude 600 --comms vdes --phasing 1
 # ./batch.sim.sh all "MyConstellation_Phase2" --sats 24 --planes 8 --inc 53.0 --altitude 600 --comms vdes --phasing 1
-# ./batch.sim.sh coverage "Storm_Test_Coverage" --sats 66 --planes 6 --sso --comms vdes --weather storm --coverage-type all
+# ./batch.sim.sh coverage "weather_test_Coverage" --sats 66 --planes 6 --sso --comms vdes --weather storm --coverage-type all
 # ./batch.sim.sh heatmap "HighRes_Global_Coverage" --sats 66 --planes 6 --sso --comms vdes --res 2.0

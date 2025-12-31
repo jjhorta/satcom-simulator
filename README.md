@@ -493,7 +493,7 @@ Automated suite for running comprehensive competitive constellation analysis acr
 - **AIS Legacy Competitors**: `ais_legacy_spire1`, `ais_legacy_spire2`, `ais_legacy_spire3`
 - **VDES Options**: `vdes_3planes`, `vdes_4planes`, `vdes_phase2`
 - **MSS Competitor**: `iridium`
-- **Weather Testing**: `storm_test`
+- **Weather Testing**: `weather_test_clear`, `weather_test_tropical`, `storm_test`
 - **High Resolution**: `highres`
 
 **Usage:**
@@ -515,6 +515,8 @@ output_sims/
 ├── 03_Phase2_Expansion/
 │   └── MyConstellation_Phase2/
 ├── 04_Weather_Testing/
+│   ├── Clear_Weather_Test/
+│   ├── Tropical_Test_Coverage/
 │   └── Storm_Test_Coverage/
 └── 05_High_Resolution/
     └── HighRes_Global_Coverage/
@@ -522,7 +524,10 @@ output_sims/
 
 **Workflow:**
 1. Script prompts for confirmation before starting
-2. Executes each scenario with all views (orbit, track, coverage, heatmap)
+2. Executes each scenario with all views (orbit, track, heatmap)
+   - **Orbit views**: Generated with `--map` and `--trails` flags for full visualization
+   - **Track views**: Generated with `--map` flag showing world map background
+   - **Heatmap views**: Global coverage analysis
 3. Displays real-time progress with color-coded status
 4. Generates final summary with success/failure statistics
 
