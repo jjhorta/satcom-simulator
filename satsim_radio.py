@@ -700,63 +700,81 @@ def calculate_constellation_metrics(num_sats, num_planes, altitude_km, inclinati
     }
 
 
-def print_constellation_dashboard(metrics):
-    """Print a formatted dashboard of constellation metrics"""
+def print_constellation_dashboard(metrics, filename=None):
+    """Print a formatted dashboard of constellation metrics and optionally save to file
     
-    print("\n" + "="*80)
-    print("  🛰️  SATELLITE CONSTELLATION ENGINEERING DASHBOARD  🛰️")
-    print("="*80)
+    Args:
+        metrics: Dictionary containing constellation metrics
+        filename: Optional filename to save dashboard (without extension, .txt will be added)
+    """
+    
+    # Build dashboard content as a list of lines
+    lines = []
+    lines.append("\n" + "="*80)
+    lines.append("  🛰️  SATELLITE CONSTELLATION ENGINEERING DASHBOARD  🛰️")
+    lines.append("="*80)
     
     # Constellation Configuration
-    print("\n📡 CONSTELLATION CONFIGURATION")
-    print("-" * 80)
+    lines.append("\n📡 CONSTELLATION CONFIGURATION")
+    lines.append("-" * 80)
     c = metrics['constellation']
-    print(f"  Total Satellites:     {c['total_satellites']:>6d}")
-    print(f"  Orbital Planes:       {c['num_planes']:>6d}")
-    print(f"  Sats per Plane:       {c['sats_per_plane']:>6d}")
-    print(f"  Altitude:             {c['altitude_km']:>6.0f} km")
-    print(f"  Inclination:          {c['inclination_deg']:>6.1f}°")
+    lines.append(f"  Total Satellites:     {c['total_satellites']:>6d}")
+    lines.append(f"  Orbital Planes:       {c['num_planes']:>6d}")
+    lines.append(f"  Sats per Plane:       {c['sats_per_plane']:>6d}")
+    lines.append(f"  Altitude:             {c['altitude_km']:>6.0f} km")
+    lines.append(f"  Inclination:          {c['inclination_deg']:>6.1f}°")
     
     # Orbital Mechanics
-    print("\n🌍 ORBITAL MECHANICS")
-    print("-" * 80)
+    lines.append("\n🌍 ORBITAL MECHANICS")
+    lines.append("-" * 80)
     o = metrics['orbital']
-    print(f"  Orbital Period:       {o['period_min']:>6.1f} minutes ({o['period_min']/60:.2f} hours)")
-    print(f"  Orbital Velocity:     {o['velocity_km_s']:>6.2f} km/s")
-    print(f"  Orbits per Day:       {o['orbits_per_day']:>6.1f}")
+    lines.append(f"  Orbital Period:       {o['period_min']:>6.1f} minutes ({o['period_min']/60:.2f} hours)")
+    lines.append(f"  Orbital Velocity:     {o['velocity_km_s']:>6.2f} km/s")
+    lines.append(f"  Orbits per Day:       {o['orbits_per_day']:>6.1f}")
     
     # Coverage Analysis
-    print("\n📶 COVERAGE ANALYSIS")
-    print("-" * 80)
+    lines.append("\n📶 COVERAGE ANALYSIS")
+    lines.append("-" * 80)
     cov = metrics['coverage']
-    print(f"  Min Elevation Angle:  {cov['min_elevation_deg']:>6.1f}°")
-    print(f"  Coverage Radius:      {cov['radius_km']:>6.0f} km")
-    print(f"  Coverage Diameter:    {cov['diameter_km']:>6.0f} km")
-    print(f"  Coverage Area:        {cov['area_km2']:>6,.0f} km²")
-    print(f"  Earth Coverage/Sat:   {cov['coverage_per_sat_pct']:>6.2f}%")
-    print(f"  Avg Revisit Time:     {cov['avg_revisit_time_min']:>6.1f} minutes")
-    print(f"  Max Gap Time:         {cov['max_gap_time_min']:>6.1f} minutes")
+    lines.append(f"  Min Elevation Angle:  {cov['min_elevation_deg']:>6.1f}°")
+    lines.append(f"  Coverage Radius:      {cov['radius_km']:>6.0f} km")
+    lines.append(f"  Coverage Diameter:    {cov['diameter_km']:>6.0f} km")
+    lines.append(f"  Coverage Area:        {cov['area_km2']:>6,.0f} km²")
+    lines.append(f"  Earth Coverage/Sat:   {cov['coverage_per_sat_pct']:>6.2f}%")
+    lines.append(f"  Avg Revisit Time:     {cov['avg_revisit_time_min']:>6.1f} minutes")
+    lines.append(f"  Max Gap Time:         {cov['max_gap_time_min']:>6.1f} minutes")
     
     # Link Budget
-    print("\n📡 LINK BUDGET BASICS")
-    print("-" * 80)
+    lines.append("\n📡 LINK BUDGET BASICS")
+    lines.append("-" * 80)
     lb = metrics['link_budget']
-    print(f"  Frequency Band:       {lb['frequency_band']}")
-    print(f"  Slant Range (min):    {lb['slant_range_km']:>6.0f} km")
-    print(f"  Free Space Loss:      {lb['free_space_loss_db']:>6.1f} dB (at 14 GHz)")
+    lines.append(f"  Frequency Band:       {lb['frequency_band']}")
+    lines.append(f"  Slant Range (min):    {lb['slant_range_km']:>6.0f} km")
+    lines.append(f"  Free Space Loss:      {lb['free_space_loss_db']:>6.1f} dB (at 14 GHz)")
     
     # Lifetime & Deployment
-    print("\n🚀 LIFETIME & DEPLOYMENT")
-    print("-" * 80)
+    lines.append("\n🚀 LIFETIME & DEPLOYMENT")
+    lines.append("-" * 80)
     lt = metrics['lifetime']
-    print(f"  Satellite Lifetime:   {lt['satellite_lifetime_years']:>6.1f} years")
-    print(f"  First Deorbit:        Year {lt['first_deorbit_year']:.1f}")
-    print(f"  Replacement Rate:     {lt['replacement_rate_per_year']:>6.1f} satellites/year")
-    print(f"  Launch Batch Size:    {lt['batch_size']:>6d} satellites")
-    print(f"  Initial Launches:     {lt['initial_launches']:>6d} launches")
-    print(f"  Steady-State:         {lt['steady_state_launches_per_year']:>6d} launches/year")
+    lines.append(f"  Satellite Lifetime:   {lt['satellite_lifetime_years']:>6.1f} years")
+    lines.append(f"  First Deorbit:        Year {lt['first_deorbit_year']:.1f}")
+    lines.append(f"  Replacement Rate:     {lt['replacement_rate_per_year']:>6.1f} satellites/year")
+    lines.append(f"  Launch Batch Size:    {lt['batch_size']:>6d} satellites")
+    lines.append(f"  Initial Launches:     {lt['initial_launches']:>6d} launches")
+    lines.append(f"  Steady-State:         {lt['steady_state_launches_per_year']:>6d} launches/year")
     
-    print("\n" + "="*80 + "\n")
+    lines.append("\n" + "="*80 + "\n")
+    
+    # Print to console
+    dashboard_text = "\n".join(lines)
+    print(dashboard_text)
+    
+    # Save to file if filename provided
+    if filename:
+        output_file = f"{filename}.txt"
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(dashboard_text)
+        print(f"💾 Dashboard saved to: {output_file}")
 
 
 
@@ -1441,7 +1459,11 @@ def view_orbit(args):
         inclination_deg=inc,
         min_elev_deg=min_elev
     )
-    print_constellation_dashboard(metrics)
+    
+    # Generate dashboard filename
+    walker_suffix = f"walker_{int(inc)}_{args.sats}_{args.planes}"
+    dashboard_filename = f"dashboard_{walker_suffix}"
+    print_constellation_dashboard(metrics, filename=dashboard_filename)
     
     tles = generate_walker_delta_tles(args.sats, args.planes, inc, args.altitude, args.phasing)
     sats = [EarthSatellite(line1, line2, name, ts) for name, line1, line2 in tles]
