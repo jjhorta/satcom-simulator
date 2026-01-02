@@ -2160,6 +2160,34 @@ def view_orbit(args):
 
 # --- TRACK VIEW (GROUND TRACK) ---
 
+def load_earth_texture():
+    """Load coastline data for 2D Mercator projection background.
+    Returns a matplotlib-compatible image array or None if unavailable."""
+    import json
+    import os
+    
+    coastline_file = "coastline.json"
+    
+    # Check if we have downloaded coastline data
+    if not os.path.exists(coastline_file):
+        print(f"⚠️  Coastline data not found: {coastline_file}")
+        print("   Run orbit mode first to download coastline data automatically")
+        return None
+    
+    try:
+        with open(coastline_file, 'r') as f:
+            data = json.load(f)
+        
+        # Create a simple coastline representation
+        # For a proper texture, we'd need to render coastlines to an image
+        # For now, we'll return the data structure to be plotted directly
+        return data
+        
+    except Exception as e:
+        print(f"⚠️  Error reading coastline data: {e}")
+        return None
+
+
 def view_track(args):
     """Ground track visualization"""
     ts = load.timescale()
@@ -2178,11 +2206,27 @@ def view_track(args):
     
     # Add world map background if --map is enabled
     if args.map:
-        earth_texture = load_earth_texture()
-        if earth_texture is not None:
-            # Display Earth texture as background (Mercator projection)
-            ax.imshow(earth_texture, extent=[-180, 180, -90, 90], 
-                     aspect='auto', alpha=0.6, zorder=0)
+        coastline_data = load_earth_texture()
+        if coastline_data is not None:
+            # Draw coastlines on 2D Mercator projection
+            for feature in coastline_data['features']:
+                geom = feature['geometry']
+                
+                if geom['type'] == 'LineString':
+                    coords = geom['coordinates']
+                    lons = [c[0] for c in coords]
+                    lats = [c[1] for c in coords]
+                    ax.plot(lons, lats, 'k-', linewidth=0.5, alpha=0.3, zorder=0)
+                    
+                elif geom['type'] == 'MultiLineString':
+                    # Draw each segment
+                    for segment in geom['coordinates']:
+                        lons = [c[0] for c in segment]
+                        lats = [c[1] for c in segment]
+                        ax.plot(lons, lats, 'k-', linewidth=0.5, alpha=0.3, zorder=0)
+    
+    # Set background color to ocean blue
+    ax.set_facecolor('#E0F0FF')
     
     # Plot tracks
     colors = plt.cm.tab20(np.linspace(0, 1, args.planes))
@@ -2196,7 +2240,26 @@ def view_track(args):
             lons.append(geo.longitude.degrees)
         
         plane_idx = idx // (args.sats // args.planes)
-        ax.plot(lons, lats, color=colors[plane_idx], alpha=0.8, linewidth=1.2, zorder=1)
+        
+        # Split track at dateline crossings to avoid horizontal lines
+        lons_array = np.array(lons)
+        lats_array = np.array(lats)
+        
+        # Detect large longitude jumps (>180° means crossing dateline)
+        lon_diff = np.diff(lons_array)
+        crossing_indices = np.where(np.abs(lon_diff) > 180)[0]
+        
+        # Plot segments between crossings
+        start_idx = 0
+        for cross_idx in crossing_indices:
+            # Plot segment up to crossing
+            ax.plot(lons_array[start_idx:cross_idx+1], lats_array[start_idx:cross_idx+1], 
+                   color=colors[plane_idx], alpha=0.8, linewidth=1.2, zorder=1)
+            start_idx = cross_idx + 1
+        
+        # Plot final segment
+        ax.plot(lons_array[start_idx:], lats_array[start_idx:], 
+               color=colors[plane_idx], alpha=0.8, linewidth=1.2, zorder=1)
     
     ax.set_xlim([-180, 180])
     ax.set_ylim([-90, 90])
