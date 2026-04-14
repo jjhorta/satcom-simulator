@@ -1,0 +1,143 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                   GRAPHICS BACKENDS - QUICK REFERENCE                      ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ SYNTAX                                                                     │
+├────────────────────────────────────────────────────────────────────────────┤
+│ ./run.sh --backend <BACKEND> <MODE> [OPTIONS]                             │
+│                                                                            │
+│ BACKENDS: matplotlib | plotly | bokeh                                     │
+│ MODES: heatmap | orbit | sky | track | route                             │
+└────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ BACKEND COMPARISON                                                         │
+├──────────────┬──────────┬────────────┬──────────────┬─────────────────────┤
+│ Backend      │ Output   │ File Size  │ Interactive  │ Best For            │
+├──────────────┼──────────┼────────────┼──────────────┼─────────────────────┤
+│ matplotlib   │ PNG      │ 50KB-5MB   │ ✗ Static     │ Publications        │
+│ plotly       │ HTML     │ 3-8 MB     │ ✓✓ Full 3D   │ 3D orbit views      │
+│ bokeh        │ HTML     │ 2-5 MB     │ ✓ 2D zoom    │ Large heatmaps      │
+└──────────────┴──────────┴────────────┴──────────────┴─────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ QUICK EXAMPLES                                                             │
+└────────────────────────────────────────────────────────────────────────────┘
+
+📊 HEATMAP - Global Coverage
+────────────────────────────────────────────────────────────────────────────
+  # Static PNG (fastest, smallest)
+  ./run.sh heatmap --sats 12 --planes 3 --res 5
+  
+  # Interactive HTML with zoom
+  ./run.sh --backend plotly heatmap --sats 12 --planes 3 --res 5
+  
+  # Fast 2D interactive
+  ./run.sh --backend bokeh heatmap --sats 12 --planes 3 --res 5
+
+🛸 ORBIT - 3D Visualization
+────────────────────────────────────────────────────────────────────────────
+  # Interactive 3D (RECOMMENDED)
+  ./run.sh --backend plotly orbit --sats 24 --planes 4
+  
+  # Static snapshot
+  ./run.sh orbit --sats 24 --planes 4
+
+🎯 SKY - Single Location
+────────────────────────────────────────────────────────────────────────────
+  # Works with matplotlib (default)
+  ./run.sh sky --location panama_canal --comms vdes --save
+
+🗺️ ROUTE - Path Analysis
+────────────────────────────────────────────────────────────────────────────
+  # Works with matplotlib (default)
+  ./run.sh route --route dragon_path --sats 53 --planes 12
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ INSTALLATION                                                               │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  # Default (matplotlib only)
+  pip install matplotlib numpy skyfield Pillow
+  
+  # All backends
+  pip install -r requirements.txt
+  
+  # Add plotly individually
+  pip install plotly
+  
+  # Add bokeh individually  
+  pip install bokeh
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ INTERACTIVE FEATURES (plotly/bokeh)                                        │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  Plotly 3D Controls:
+    • Left click + drag   → Rotate view
+    • Right click + drag  → Pan
+    • Scroll wheel        → Zoom
+    • Double click        → Reset view
+    • Hover               → Show values
+  
+  Bokeh/Plotly 2D Controls:
+    • Hover               → Show exact coverage %
+    • Click + drag        → Pan map
+    • Scroll wheel        → Zoom in/out
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ OUTPUT FILES                                                               │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  matplotlib:
+    ├── heatmap_vdes_walker_87_12_3.png     (~50KB-5MB)
+    ├── heatmap_vdes_walker_87_12_3.csv     (data)
+    └── orbit_walker_87_12_3.png            (static)
+  
+  plotly:
+    ├── heatmap_vdes_walker_87_12_3.html    (~3-8MB)
+    ├── heatmap_vdes_walker_87_12_3.csv     (data)
+    └── orbit_walker_87_12_3.html           (~4-7MB, interactive!)
+  
+  bokeh:
+    ├── heatmap_vdes_walker_87_12_3.html    (~2-5MB)
+    └── heatmap_vdes_walker_87_12_3.csv     (data)
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ WHEN TO USE WHICH BACKEND                                                  │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  ✓ matplotlib:  Research papers, batch processing, scripting
+  ✓ plotly:      Presentations, 3D exploration, interactive demos
+  ✓ bokeh:       Large datasets, fast 2D interaction, web dashboards
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ TROUBLESHOOTING                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  ⚠️ "Backend not installed"
+     → pip install plotly    # or bokeh
+  
+  ⚠️ HTML files won't open
+     → firefox heatmap_vdes_walker_87_12_3.html
+     → google-chrome orbit_walker_87_12_3.html
+  
+  ⚠️ File too large
+     → Reduce resolution: --res 10 (instead of --res 2)
+     → Reduce duration: --duration 120 (instead of 360)
+     → Use matplotlib for final output
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ DEMO & DOCUMENTATION                                                       │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  Run demo:              ./demo_backends.sh
+  Full guide:            documentation/graphics_backends.md
+  Implementation:        GRAPHICS_BACKEND_IMPLEMENTATION.md
+  Main README:           README.md
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║ TIP: For best 3D orbit views, always use:                                 ║
+║      ./run.sh --backend plotly orbit --sats 24 --planes 4                 ║
+╚════════════════════════════════════════════════════════════════════════════╝

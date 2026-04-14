@@ -1,0 +1,52 @@
+
+================================================================================
+  🛰️  SATELLITE CONSTELLATION ENGINEERING DASHBOARD  🛰️
+================================================================================
+
+📡 CONSTELLATION CONFIGURATION
+--------------------------------------------------------------------------------
+  Total Satellites:          6
+  Orbital Planes:            2
+  Sats per Plane:            3
+  Altitude:                200 km
+  Inclination:            87.4°
+
+🌍 ORBITAL MECHANICS
+--------------------------------------------------------------------------------
+  Orbital Period:         88.5 minutes (1.47 hours)
+  Orbital Velocity:       7.78 km/s
+  Orbits per Day:         16.3
+
+📶 COVERAGE ANALYSIS
+--------------------------------------------------------------------------------
+  Min Elevation Angle:    10.0°
+  Coverage Radius:         810 km
+  Coverage Diameter:      1621 km
+  Coverage Area:        2,063,116 km²
+  Earth Coverage/Sat:     0.40%
+  Avg Revisit Time:     7964.5 minutes
+  Max Gap Time:         15928.9 minutes
+
+📡 LINK BUDGET BASICS
+--------------------------------------------------------------------------------
+  Frequency Band:       Ku-band (12-18 GHz)
+  Slant Range (min):      1152 km
+  Free Space Loss:       101.4 dB (at 14 GHz)
+
+🚀 LIFETIME & DEPLOYMENT
+--------------------------------------------------------------------------------
+  Satellite Lifetime:      0.5 years
+  First Deorbit:        Year 0.5
+  Replacement Rate:       12.0 satellites/year
+  Launch Batch Size:         1 satellites
+  Initial Launches:          6 launches
+  Steady-State:             12 launches/year
+
+💰 ECONOMIC SUMMARY (TCO)
+--------------------------------------------------------------------------------
+  Initial Investment:       $    41.7M
+  Annual Operating Cost:    $    75.1M/year
+  Total TCO (15 years):     $  1168.5M
+  Cost per Sat/Year:        $  12.984M
+
+================================================================================

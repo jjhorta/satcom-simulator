@@ -1,0 +1,60 @@
+
+================================================================================
+  💰 TOTAL COST OF OWNERSHIP (TCO) ANALYSIS 💰
+================================================================================
+
+📋 MISSION PARAMETERS
+--------------------------------------------------------------------------------
+  Constellation Size:       1 satellites in 1 planes
+  Deployment Mode:          Basic
+  Platform Type:            Smallsat (100-250 kg, SAR/optical)
+  Satellite Mass:           150 kg
+  Payload:                  VDES
+  Satellite Lifetime:       10.0 years
+  Replacement Rate:         0.1 sats/year
+  Mission Duration:         15 years
+
+🚀 LAUNCH CONFIGURATION
+--------------------------------------------------------------------------------
+  Launch Vehicle:           Rideshare (SpaceX Transporter, ~$325k+mass)
+  Satellites per Launch:    1
+  Planes per Launch:        1
+  Initial Deployment:       1 launches
+  Steady-State:             1 launches/year
+
+💵 INITIAL INVESTMENT (CAPEX)
+--------------------------------------------------------------------------------
+  Development (R&D):        $     2.5M
+  Initial Satellites:       $     5.0M
+  Initial Launches:         $     1.3M
+  Ground Infrastructure:    $     0.9M
+  Launch Insurance:         $     0.3M
+  ───────────────────────────────────
+  TOTAL CAPEX:              $    10.0M
+
+📅 RECURRING COSTS (OPEX per year)
+--------------------------------------------------------------------------------
+  Satellite Replacement:    $     0.5M/year
+  Replacement Launches:     $     0.4M/year
+  Ground Operations:        $     0.5M/year
+  Staff:                    $     0.1M/year
+  Insurance (In-Orbit):     $     0.1M/year
+  Decommissioning:          $     0.2M/year
+  ───────────────────────────────────
+  TOTAL ANNUAL OPEX:        $     1.8M/year
+
+💰 TOTAL COST OF OWNERSHIP
+--------------------------------------------------------------------------------
+  Total CAPEX:              $    10.0M
+  Total OPEX (15 years):     $    27.7M
+  ───────────────────────────────────
+  TOTAL TCO (15 years):      $    37.7M
+
+  Cost per Satellite/Year:  $   2.515M
+
+🏗️  INFRASTRUCTURE REQUIREMENTS
+--------------------------------------------------------------------------------
+  Ground Stations:          1
+  Engineering Staff:        1 people
+
+================================================================================

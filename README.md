@@ -52,7 +52,41 @@ If successful, you'll see the simulator's help menu.
 
 ---
 
-## 🎯 Quick Start
+## � Graphics Backends (NEW!)
+
+The simulator now supports **multiple graphics backends** for enhanced visualization:
+
+### Available Backends
+
+| Backend | Type | Best For | Installation |
+|---------|------|----------|--------------|
+| **matplotlib** | Static PNG | Publication figures, batch processing | `pip install matplotlib` (default) |
+| **plotly** | Interactive HTML | 3D orbit views, interactive exploration | `pip install plotly` |
+| **bokeh** | Interactive HTML | Fast 2D heatmaps, large datasets | `pip install bokeh` |
+
+### Quick Examples
+
+```bash
+# Default matplotlib (static PNG)
+./run.sh heatmap --sats 12 --planes 3
+
+# Plotly (interactive 3D - RECOMMENDED for orbit mode)
+./run.sh --backend plotly orbit --sats 24 --planes 4
+# Output: orbit_walker_87_24_4.html (rotate/zoom/pan with mouse!)
+
+# Plotly interactive heatmap
+./run.sh --backend plotly heatmap --sats 53 --planes 12 --res 2
+# Output: heatmap_vdes_walker_87_53_12.html
+
+# Bokeh (fast interactive 2D)
+./run.sh --backend bokeh heatmap --sats 97 --planes 11 --res 5
+```
+
+**See [Graphics Backends Guide](documentation/graphics_backends.md) for detailed usage.**
+
+---
+
+## �🎯 Quick Start
 
 ### Activate Virtual Environment (Manual)
 If you need to activate the venv manually:
