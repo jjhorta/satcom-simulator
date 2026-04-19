@@ -1,0 +1,288 @@
+"""
+RQ worker tasks — run simulator as a subprocess.
+
+The simulator is invoked with the venv Python from the simulator root.
+PYTHONPATH is set so the `sim` package is importable even though cwd=output_dir.
+All simulator output files land in output_dir (cwd).
+Settings overrides (comms/weather constants) are injected via a PYTHONSTARTUP
+script that monkey-patches sim.constants before the simulator runs.
+"""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+# ── Path helpers ──────────────────────────────────────────────────────────────
+
+def _simulator_root(simulator_root: str) -> Path:
+    return Path(simulator_root)
+
+
+def _venv_python(simulator_root: str) -> Path:
+    """Prefer the simulator venv; fall back to current interpreter."""
+    candidate = _simulator_root(simulator_root) / "venv" / "bin" / "python3"
+    return candidate if candidate.exists() else Path(sys.executable)
+
+
+def _satsim_script(simulator_root: str) -> Path:
+    return _simulator_root(simulator_root) / "satsim_radio.py"
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+# ── Settings override helpers ─────────────────────────────────────────────────
+
+def _load_settings_overrides(outputs_dir: str) -> dict:
+    """Load settings.json override file if it exists."""
+    path = Path(outputs_dir) / "settings.json"
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _write_patcher_script(overrides: dict) -> str | None:
+    """
+    Write a temporary PYTHONSTARTUP script that monkey-patches sim.constants
+    with user overrides when the subprocess starts.
+    Returns the temp file path, or None if there are no overrides.
+    """
+    comms = overrides.get("comms_payloads", {})
+    weather = overrides.get("weather_scenarios", {})
+    sea = overrides.get("sea_routes", {})
+    arctic = overrides.get("arctic_routes", {})
+    tco = overrides.get("tco_config", {})
+    if not comms and not weather and not sea and not arctic and not tco:
+        return None
+
+    lines = [
+        "import sys, importlib",
+        "def _patch_constants():",
+        "    try:",
+        "        c = importlib.import_module('sim.constants')",
+    ]
+    for tech, fields in comms.items():
+        for field, val in fields.items():
+            lines.append(f"        if {repr(tech)} in c.COMMS_PAYLOADS: c.COMMS_PAYLOADS[{repr(tech)}][{repr(field)}] = {repr(val)}")
+    for scenario, val in weather.items():
+        lines.append(f"        if {repr(scenario)} in c.WEATHER_SCENARIOS: c.WEATHER_SCENARIOS[{repr(scenario)}] = {repr(val)}")
+    for route_name, wps in sea.items():
+        lines.append(f"        c.SEA_ROUTES[{repr(route_name)}] = [tuple(wp) for wp in {repr(wps)}]")
+    for route_name, wps in arctic.items():
+        lines.append(f"        c.ARCTIC_ROUTES[{repr(route_name)}] = [tuple(wp) for wp in {repr(wps)}]")
+    if tco:
+        lines.append(f"        _tco_ovr = {repr(tco)}")
+        lines.append("        def _dm(b, o):")
+        lines.append("            for k, v in o.items():")
+        lines.append("                b[k] = _dm(b[k], v) if isinstance(b.get(k), dict) and isinstance(v, dict) else v")
+        lines.append("            return b")
+        lines.append("        _dm(c.TCO_CONFIG, _tco_ovr)")
+    lines += [
+        "    except Exception:",
+        "        pass",
+        "_patch_constants()",
+    ]
+
+    script = "\n".join(lines) + "\n"
+    fd, path = tempfile.mkstemp(suffix=".py", prefix="sim_patcher_")
+    with os.fdopen(fd, "w") as f:
+        f.write(script)
+    return path
+
+
+# ── Job store helpers (inlined to avoid import path issues in worker) ─────────
+
+def _update_job_meta(output_dir: Path, job_id: str, **kwargs) -> None:
+    meta_path = output_dir / "job.json"
+    if meta_path.exists():
+        data: dict = json.loads(meta_path.read_text(encoding="utf-8"))
+        data.update(kwargs)
+        meta_path.write_text(json.dumps(data), encoding="utf-8")
+
+
+# ── CLI builder ───────────────────────────────────────────────────────────────
+
+def _flag(key: str) -> str:
+    """Convert snake_case param key to --kebab-case CLI flag."""
+    return f"--{key.replace('_', '-')}"
+
+
+def _build_command(
+    python: Path,
+    script: Path,
+    mode: str,
+    params: dict[str, Any],
+) -> list[str]:
+    """
+    Build the satsim_radio.py command line from mode + params dict.
+
+    satsim_radio.py structure:
+        satsim_radio.py [--backend BACKEND] <subcommand> [subcommand-flags...]
+
+    All constellation geometry flags (--sats, --planes, etc.) belong to the
+    subcommand, not the top-level parser.
+    --save is only accepted by: sky, orbit, track, route  (NOT heatmap).
+    """
+    # Modes that support --save
+    MODES_WITH_SAVE = {"sky", "orbit", "track", "route"}
+
+    # Keys that must never be emitted as CLI flags
+    SKIP_PARAMS = {
+        "backend",   # handled explicitly before subcommand
+        "mode",      # IS the subcommand
+        "sso",       # handled explicitly as a boolean flag
+        # Constellation geometry handled in explicit loop below
+        "sats", "planes", "altitude", "phasing", "inclination",
+    }
+
+    cmd = [str(python), str(script)]
+
+    # ── Only truly global flag ─────────────────────────────────────────────
+    cmd += ["--backend", str(params.get("backend", "matplotlib"))]
+
+    # ── Subcommand ─────────────────────────────────────────────────────────
+    cmd.append(mode)
+
+    # ── Constellation geometry (subcommand-level, consistent across modes) ─
+    for key in ("sats", "planes", "altitude", "phasing", "inclination"):
+        val = params.get(key)
+        if val is not None:
+            cmd += [_flag(key), str(val)]
+    if params.get("sso"):
+        cmd.append("--sso")
+
+    # ── Mode-specific flags ─────────────────────────────────────────────────
+    for key, val in params.items():
+        if key in SKIP_PARAMS:
+            continue
+        if val is True:
+            cmd.append(_flag(key))
+        elif val is False or val is None:
+            continue
+        else:
+            cmd += [_flag(key), str(val)]
+
+    # ── --save only for modes that support it ──────────────────────────────
+    if mode in MODES_WITH_SAVE:
+        cmd.append("--save")
+
+    return cmd
+
+
+# ── Main task ─────────────────────────────────────────────────────────────────
+
+def run_simulation(
+    job_id: str,
+    mode: str,
+    params: dict[str, Any],
+    outputs_dir: str,
+    simulator_root: str,
+) -> dict:
+    """
+    RQ task entry point.
+
+    Parameters
+    ----------
+    job_id        : internal job identifier
+    mode          : 'heatmap' | 'sky' | 'orbit' | 'track' | 'route'
+    params        : flat dict of CLI param names → values
+    outputs_dir   : absolute path to the web outputs directory  (e.g. /app/outputs)
+    simulator_root: absolute path to the constellation_simulator directory
+    """
+    output_dir = Path(outputs_dir) / job_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    log_path = output_dir / "job.log"
+
+    # Mark job as running
+    _update_job_meta(output_dir, job_id, status="running", started_at=_now_iso())
+
+    python = _venv_python(simulator_root)
+    script = _satsim_script(simulator_root)
+
+    if not script.exists():
+        error_msg = f"Simulator script not found: {script}"
+        _update_job_meta(output_dir, job_id, status="failed",
+                         completed_at=_now_iso(), error=error_msg)
+        return {"status": "failed", "error": error_msg}
+
+    try:
+        cmd = _build_command(python, script, mode, params)
+    except KeyError as exc:
+        error_msg = f"Unknown mode: {exc}"
+        _update_job_meta(output_dir, job_id, status="failed",
+                         completed_at=_now_iso(), error=error_msg)
+        return {"status": "failed", "error": error_msg}
+
+    # Set PYTHONPATH so `sim` package is importable from any cwd
+    env = os.environ.copy()
+    existing_pp = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (
+        f"{simulator_root}:{existing_pp}" if existing_pp else simulator_root
+    )
+
+    # Inject settings overrides via PYTHONSTARTUP monkey-patch
+    overrides = _load_settings_overrides(outputs_dir)
+    patcher_path = _write_patcher_script(overrides)
+    if patcher_path:
+        env["PYTHONSTARTUP"] = patcher_path
+
+    # Write the command to the log for debugging
+    with open(log_path, "w", encoding="utf-8") as log_fh:
+        log_fh.write(f"[{_now_iso()}] Running command:\n")
+        log_fh.write(" ".join(cmd) + "\n\n")
+
+        proc = subprocess.run(
+            cmd,
+            cwd=str(output_dir),
+            env=env,
+            stdout=log_fh,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=3600,  # 1-hour hard limit per job
+        )
+
+    # Clean up temp patcher script
+    if patcher_path:
+        try:
+            os.unlink(patcher_path)
+        except Exception:
+            pass
+
+    if proc.returncode == 0:
+        status = "completed"
+        error = None
+    else:
+        status = "failed"
+        # Grab last 20 lines of log as error summary
+        try:
+            all_lines = log_path.read_text(encoding="utf-8").splitlines()
+            error = "\n".join(all_lines[-20:])
+        except Exception:
+            error = f"Process exited with code {proc.returncode}"
+
+    files = [
+        f.name for f in sorted(output_dir.iterdir())
+        if f.name not in ("job.json", "job.log") and f.is_file()
+    ]
+
+    _update_job_meta(
+        output_dir, job_id,
+        status=status,
+        completed_at=_now_iso(),
+        error=error,
+        files=files,
+    )
+
+    return {"status": status, "files": files, "return_code": proc.returncode}

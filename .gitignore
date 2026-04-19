@@ -44,6 +44,12 @@ output_sims/
 examples/
 *.log
 
+# Simulation scratch output
+tmp/
+
+# Secrets — never commit
+web/.env
+
 # Skyfield data
 *.bsp
 finals2000A.all

@@ -379,3 +379,55 @@ TCO_CONFIG = {
         }
     }
 }
+
+# --- CONSTELLATION PRESETS ---
+CONSTELLATION_PRESETS = {
+    "Iridium NEXT": {
+        "sats": 66, "planes": 6, "altitude": 780, "inclination": 86.4, "phasing": 1, "sso": False,
+        "description": "LEO MSS voice/data constellation (780 km, 86.4°)"
+    },
+    "GPS Block III": {
+        "sats": 24, "planes": 6, "altitude": 20200, "inclination": 55.0, "phasing": 1, "sso": False,
+        "description": "US GNSS MEO navigation constellation (20,200 km, 55°)"
+    },
+    "Galileo": {
+        "sats": 24, "planes": 3, "altitude": 23222, "inclination": 56.0, "phasing": 1, "sso": False,
+        "description": "EU GNSS MEO navigation constellation (23,222 km, 56°)"
+    },
+    "GLONASS": {
+        "sats": 24, "planes": 3, "altitude": 19100, "inclination": 64.8, "phasing": 1, "sso": False,
+        "description": "Russian GNSS MEO navigation constellation (19,100 km, 64.8°)"
+    },
+    "Spire Global AIS": {
+        "sats": 110, "planes": 10, "altitude": 500, "inclination": 97.4, "phasing": 1, "sso": True,
+        "description": "AIS/weather LEO constellation (500 km SSO)"
+    },
+    "Starlink 256 (Shell 1)": {
+        "sats": 256, "planes": 16, "altitude": 550, "inclination": 53.0, "phasing": 1, "sso": False,
+        "description": "Starlink 256-sat representative LEO shell (550 km, 53°)"
+    },
+    "Amazon Kuiper Shell 1": {
+        "sats": 578, "planes": 34, "altitude": 590, "inclination": 33.0, "phasing": 1, "sso": False,
+        "description": "Amazon Kuiper LEO broadband shell 1 (590 km, 33°)"
+    },
+    "OneWeb Phase 1": {
+        "sats": 648, "planes": 12, "altitude": 1200, "inclination": 87.9, "phasing": 1, "sso": False,
+        "description": "OneWeb broadband LEO constellation (1,200 km, 87.9°)"
+    },
+    "Planet Labs Dove": {
+        "sats": 175, "planes": 12, "altitude": 475, "inclination": 97.4, "phasing": 1, "sso": True,
+        "description": "Planet Labs Earth-observation SSO constellation (475 km)"
+    },
+    "Orbcomm OG2": {
+        "sats": 18, "planes": 6, "altitude": 750, "inclination": 47.0, "phasing": 1, "sso": False,
+        "description": "Orbcomm M2M LEO constellation (750 km, 47°)"
+    },
+    "LusoSpace AIS Demo": {
+        "sats": 12, "planes": 3, "altitude": 600, "inclination": 53.0, "phasing": 1, "sso": False,
+        "description": "LusoSpace AIS/VDES LEO demonstration (600 km, 53°)"
+    },
+    "LusoSpace VDES Phase 2": {
+        "sats": 24, "planes": 8, "altitude": 600, "inclination": 53.0, "phasing": 1, "sso": False,
+        "description": "LusoSpace VDES Phase 2 expansion (600 km, 53°)"
+    },
+}

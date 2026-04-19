@@ -74,8 +74,13 @@ def calculate_constellation_metrics(num_sats, num_planes, altitude_km, inclinati
     coverage_per_sat_pct = (coverage_area_km2 / earth_surface_area) * 100
 
     orbital_periods_per_day = 1440 / orbital_period_min
-    max_gap_time_min = (360 / num_planes) * orbital_period_min
-    avg_revisit_time_min = max_gap_time_min / 2
+    sats_per_plane = max(1, num_sats // num_planes)
+    # In-track gap: time between successive satellites in the same plane
+    in_track_gap_min = orbital_period_min / sats_per_plane
+    # Cross-track gap: time between successive plane passes at a given ground point
+    cross_track_gap_min = orbital_period_min / num_planes
+    max_gap_time_min = max(in_track_gap_min, cross_track_gap_min)
+    avg_revisit_time_min = (in_track_gap_min + cross_track_gap_min) / 2
 
     frequency_band = "Ku-band (12-18 GHz)"
     free_space_loss_db = 20 * np.log10(altitude_km) + 20 * np.log10(14e9) + 20 * np.log10(4 * np.pi / 3e8)

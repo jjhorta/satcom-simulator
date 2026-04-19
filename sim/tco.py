@@ -255,6 +255,27 @@ def print_tco_analysis(tco_data, filename=None):
         print(f"💾 TCO Analysis saved to: {output_file}")
 
 
+def save_tco_json(tco_data, metrics, filename):
+    """Save TCO + engineering metrics as a single JSON file for UI consumption."""
+    import json
+    payload = {
+        'mission_parameters': tco_data['mission_parameters'],
+        'launch_config':      tco_data['launch_config'],
+        'capex':              tco_data['capex'],
+        'annual_opex':        tco_data['annual_opex'],
+        'total_costs':        tco_data['total_costs'],
+        'infrastructure':     tco_data['infrastructure'],
+        'orbital':            metrics['orbital'],
+        'coverage':           metrics['coverage'],
+        'constellation':      metrics['constellation'],
+        'lifetime':           metrics['lifetime'],
+    }
+    output_file = f"{filename}.json"
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, indent=2, default=float)
+    print(f"💾 TCO JSON saved to: {output_file}")
+
+
 def print_constellation_dashboard(metrics, tco_data=None, filename=None):
     """Print a formatted engineering dashboard and optionally save to file"""
     lines = []

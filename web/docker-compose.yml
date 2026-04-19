@@ -1,0 +1,73 @@
+services:
+  # ── Data store ────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── API server ─────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - OUTPUTS_DIR=/app/outputs
+      - SIMULATOR_ROOT=/app/simulator
+    volumes:
+      - ../:/app/simulator          # constellation_simulator/ mounted read-only
+      - outputs:/app/outputs
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ── RQ worker ─────────────────────────────────────────────────────────────
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: >
+      rq worker
+        --url redis://redis:6379
+        --with-scheduler
+        sim_jobs
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - OUTPUTS_DIR=/app/outputs
+      - SIMULATOR_ROOT=/app/simulator
+    volumes:
+      - ../:/app/simulator
+      - outputs:/app/outputs
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ── React frontend (production build served by nginx) ─────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+
+  # NOTE: No nginx service here — routing is handled by the host Nginx Proxy
+  # Manager (NPM) container which is connected to this network directly.
+  # Run once: sudo docker network connect web_default nginx-proxy-manager
+
+volumes:
+  redis_data:
+  outputs:

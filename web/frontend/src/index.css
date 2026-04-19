@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-950 text-gray-100 antialiased;
+  }
+}
+
+/* Leaflet z-index fix inside flex containers */
+.leaflet-pane  { z-index: 10 !important; }
+.leaflet-top,
+.leaflet-bottom { z-index: 20 !important; }

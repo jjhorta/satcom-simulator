@@ -14,7 +14,7 @@ from skyfield.api import EarthSatellite, load, wgs84
 from .. import backends
 from ..physics import calculate_sso_inclination
 from ..constellation import generate_walker_delta_tles, calculate_coverage_footprint, calculate_constellation_metrics
-from ..tco import calculate_tco, print_constellation_dashboard, print_tco_analysis
+from ..tco import calculate_tco, print_constellation_dashboard, print_tco_analysis, save_tco_json
 from ..constants import VISUALIZATION_SETTINGS
 from ..plots.orbit import draw_continents_on_sphere, draw_coverage_circle_on_sphere, create_3d_orbit_plot
 
@@ -56,6 +56,7 @@ def view_orbit(args):
     walker_suffix = f"walker_{int(inc)}_{args.sats}_{args.planes}"
     print_constellation_dashboard(metrics, tco_data, filename=f"dashboard_{walker_suffix}")
     print_tco_analysis(tco_data, filename=f"tco_{walker_suffix}")
+    save_tco_json(tco_data, metrics, filename=f"tco_{walker_suffix}")
 
     tles = generate_walker_delta_tles(args.sats, args.planes, inc, args.altitude, args.phasing)
     sats = [EarthSatellite(line1, line2, name, ts) for name, line1, line2 in tles]
