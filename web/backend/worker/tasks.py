@@ -115,6 +115,13 @@ def _update_job_meta(output_dir: Path, job_id: str, **kwargs) -> None:
 
 def _flag(key: str) -> str:
     """Convert snake_case param key to --kebab-case CLI flag."""
+    # A few mode-specific overrides (CLI flag != param key).
+    OVERRIDES = {
+        "from_location": "--from",
+        "to_location":   "--to",
+    }
+    if key in OVERRIDES:
+        return OVERRIDES[key]
     return f"--{key.replace('_', '-')}"
 
 

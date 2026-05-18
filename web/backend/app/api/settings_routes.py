@@ -248,6 +248,35 @@ async def remove_multi_shell(
     return get_active_multi_shell_groups(app_settings.simulator_root, app_settings.outputs_dir)
 
 
+@router.put("/multi-shells/{name:path}")
+async def update_multi_shell(
+    name: str,
+    body: dict,
+    app_settings: Settings = Depends(get_settings),
+    _: str = Depends(get_current_user),
+):
+    """
+    Update an existing multi-shell group (built-in or user-created).
+    Updates are stored as user overrides — built-ins remain shippable via reset.
+    Body: {"shells": [...], "description": str, "name": optional rename target}
+    """
+    new_name = (body.get("name") or name).strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="Group name is required")
+    shells = body.get("shells", [])
+    if not shells or not isinstance(shells, list):
+        raise HTTPException(status_code=400, detail="At least one shell is required")
+    description = body.get("description", "")
+    # If renaming, drop the old override (built-in or user) first
+    if new_name != name:
+        try:
+            delete_multi_shell_group(app_settings.outputs_dir, name)
+        except Exception:
+            pass
+    save_multi_shell_group(app_settings.outputs_dir, new_name, shells, description)
+    return get_active_multi_shell_groups(app_settings.simulator_root, app_settings.outputs_dir)
+
+
 @router.delete("/multi-shells")
 async def reset_multi_shells(
     app_settings: Settings = Depends(get_settings),

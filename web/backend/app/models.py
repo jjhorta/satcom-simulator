@@ -117,7 +117,23 @@ class RouteRequest(ConstellationParams):
     max_sats: int = Field(250, ge=1, le=10000)
 
 
-JobRequest = Union[HeatmapRequest, HeatmapRfRequest, SkyRequest, OrbitRequest, TrackRequest, RouteRequest]
+class LatencyRequest(ConstellationParams):
+    mode: Literal["latency"] = "latency"
+    from_location: str = Field("33.94,-118.41")
+    to_location: str = Field("38.81,-77.30")
+    duration: int = Field(1440, ge=1, le=10080)
+    step: int = Field(5, ge=1, le=60)
+    isl_range: float = Field(5000.0, ge=100.0, le=10000.0)
+    switching_delay: float = Field(1.0, ge=0.0, le=50.0)
+    min_elev: float = Field(10.0, ge=0.0, le=90.0)
+    no_fiber: bool = False
+    constellation: Optional[str] = None
+    constellation_name: Optional[str] = None
+    shells: Optional[list[dict]] = None
+    max_sats: int = Field(250, ge=1, le=10000)
+
+
+JobRequest = Union[HeatmapRequest, HeatmapRfRequest, SkyRequest, OrbitRequest, TrackRequest, RouteRequest, LatencyRequest]
 
 
 # ── Job response models ───────────────────────────────────────────────────────

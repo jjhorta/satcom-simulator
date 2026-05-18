@@ -14,7 +14,7 @@ from ..config import Settings, get_settings
 from ..job_store import create_job, get_job, list_jobs, update_job
 from ..models import (
     HeatmapRequest, HeatmapRfRequest, JobListItem, JobStatus, JobRequest,
-    OrbitRequest, RouteRequest, SkyRequest, TrackRequest,
+    LatencyRequest, OrbitRequest, RouteRequest, SkyRequest, TrackRequest,
     UpdateJobMeta,
 )
 from ..settings_store import get_active_constellation_presets
@@ -28,6 +28,7 @@ _DISPATCH = {
     "orbit":      OrbitRequest,
     "track":      TrackRequest,
     "route":      RouteRequest,
+    "latency":    LatencyRequest,
 }
 
 

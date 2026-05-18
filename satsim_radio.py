@@ -167,7 +167,39 @@ def main():
                               help='Inline JSON array of shell dicts')
     route_parser.add_argument('--max-sats', type=int, default=250,
                               help='Max satellites to evaluate per timestep (default: 250)')
-    
+
+    # Latency mode (ISL routing, end-to-end RTT vs fiber baseline)
+    latency_parser = subparsers.add_parser('latency',
+                                           help='End-to-end latency simulation with ISL routing')
+    latency_parser.add_argument('--from', dest='from_location', default='33.94,-118.41',
+                                help='Source: lat,lon or named LOCATIONS entry')
+    latency_parser.add_argument('--to', dest='to_location', default='38.81,-77.30',
+                                help='Destination: lat,lon or named LOCATIONS entry')
+    latency_parser.add_argument('--sats', type=int, default=66)
+    latency_parser.add_argument('--planes', type=int, default=6)
+    latency_parser.add_argument('--altitude', type=float, default=600.0)
+    latency_parser.add_argument('--phasing', type=int, default=1)
+    latency_parser.add_argument('--inclination', type=float, default=87.4)
+    latency_parser.add_argument('--sso', action='store_true')
+    latency_parser.add_argument('--duration', type=int, default=1440,
+                                help='Simulation duration in minutes')
+    latency_parser.add_argument('--step', type=int, default=5,
+                                help='Snapshot interval in minutes')
+    latency_parser.add_argument('--isl-range', type=float, default=5000.0, dest='isl_range',
+                                help='Maximum ISL range in km')
+    latency_parser.add_argument('--switching-delay', type=float, default=1.0, dest='switching_delay',
+                                help='Per-hop switching delay in ms')
+    latency_parser.add_argument('--min-elev', type=float, default=10.0, dest='min_elev')
+    latency_parser.add_argument('--no-fiber', action='store_true', dest='no_fiber',
+                                help='Skip fiber baseline comparison')
+    latency_parser.add_argument('--constellation', default=None,
+                                help='Named multi-shell constellation preset')
+    latency_parser.add_argument('--constellation-name', default=None, dest='constellation_name',
+                                help='Display name for a --shells multi-shell run')
+    latency_parser.add_argument('--shells', default=None, metavar='JSON',
+                                help='Inline JSON array of shell dicts')
+    latency_parser.add_argument('--max-sats', type=int, default=250)
+
     args = parser.parse_args()
     
     # Set graphics backend before any plotting
@@ -194,6 +226,10 @@ def main():
         view_track(args)
     elif args.mode == 'route':
         run_route_analysis(args)
+    elif args.mode == 'latency':
+        from sim.modes.latency import run_latency
+        args.fiber_baseline = not getattr(args, 'no_fiber', False)
+        run_latency(args)
 
 
 if __name__ == "__main__":

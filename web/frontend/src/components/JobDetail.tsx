@@ -5,6 +5,7 @@ import type { JobFile } from '../types'
 import { X, FileText, Image, Code2, Table2, Pencil, Check, Maximize2, Minimize2, BarChart2, Sparkles, Globe } from 'lucide-react'
 import HeatmapViewer from './viewers/HeatmapViewer'
 import RouteViewer from './viewers/RouteViewer'
+import LatencyViewer from './viewers/LatencyViewer'
 import TextViewer from './viewers/TextViewer'
 import OrbitViewer3D from './viewers/OrbitViewer3D'
 import TcoDashboardModal from './viewers/TcoDashboardModal'
@@ -28,6 +29,10 @@ function FileViewer({ jobId, file }: { jobId: string; file: JobFile }) {
   }
   if (file.type === 'csv' && file.name.startsWith('route_')) {
     return <RouteViewer jobId={jobId} filename={file.name} />
+  }
+  if (file.type === 'csv' && file.name.startsWith('latency_')) {
+    const jsonName = file.name.replace(/\.csv$/, '.json')
+    return <LatencyViewer jobId={jobId} csvFilename={file.name} jsonFilename={jsonName} />
   }
   if (['png', 'gif'].includes(file.type)) {
     return (

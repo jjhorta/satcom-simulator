@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Satellite, RotateCcw, Save, ChevronDown, ChevronRight, Plus, Trash2, Sparkles, Brain, ShieldCheck, Pencil, Check, X as XIcon, Share2, Lock } from 'lucide-react'
 import { useAiStore, isAiConfigured } from '../store/aiStore'
-import { getSimSettings, updateSimSettings, resetCommsTech, resetWeather, getRoutes, updateRoute, resetRoute, getTcoSettings, resetTcoSettings, getConstellationPresets, saveConstellationPreset, deleteConstellationPreset, resetConstellationPresets, getMultiShellGroups, saveMultiShellGroup, deleteMultiShellGroup, resetMultiShellGroups, fetchAiConfig, updateAiConfig, getShareSettings, updateShareSettings } from '../api/client'
+import { getSimSettings, updateSimSettings, resetCommsTech, resetWeather, getRoutes, updateRoute, resetRoute, getTcoSettings, resetTcoSettings, getConstellationPresets, saveConstellationPreset, deleteConstellationPreset, resetConstellationPresets, getMultiShellGroups, saveMultiShellGroup, updateMultiShellGroup, deleteMultiShellGroup, resetMultiShellGroups, fetchAiConfig, updateAiConfig, getShareSettings, updateShareSettings } from '../api/client'
 import type { ConstellationPreset, ShellDef, MultiShellGroupRecord } from '../types'
 import 'leaflet/dist/leaflet.css'
 import { MapContainer, TileLayer, Polyline, useMap } from 'react-leaflet'
@@ -514,6 +514,30 @@ export default function SettingsPage() {
   const platformsList = tcoSettings ? Object.keys(tcoSettings.satellite_platforms) : ['nanosat', 'microsat', 'smallsat', 'mediumsat', 'largesat']
   const [msDefaultComms, setMsDefaultComms] = useState('')
   const [msDefaultSatType, setMsDefaultSatType] = useState('')
+  const [msEditingName, setMsEditingName] = useState<string | null>(null)
+
+  const startEditMultiShell = (name: string, g: { shells: ShellDef[]; description: string; default_comms?: string; default_satellite_type?: string }) => {
+    setMsEditingName(name)
+    setMsName(name)
+    setMsDesc(g.description || '')
+    setMsDefaultComms(g.default_comms || '')
+    setMsDefaultSatType(g.default_satellite_type || '')
+    setMsShells(g.shells.map((s, i) => ({ ...s, _key: Date.now() + i })))
+    // Scroll the form into view
+    setTimeout(() => {
+      const el = document.getElementById('multi-shell-form')
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 50)
+  }
+
+  const cancelEditMultiShell = () => {
+    setMsEditingName(null)
+    setMsName('')
+    setMsDesc('')
+    setMsShells([emptyShell()])
+    setMsDefaultComms('')
+    setMsDefaultSatType('')
+  }
 
   const mutateSave = useMutation({
     mutationFn: updateSimSettings,
@@ -589,6 +613,15 @@ export default function SettingsPage() {
       setMsShells([emptyShell()])
       setMsDefaultComms('')
       setMsDefaultSatType('')
+    },
+  })
+
+  const mutateUpdateMultiShell = useMutation({
+    mutationFn: ({ name, body }: { name: string; body: Record<string, unknown> }) => updateMultiShellGroup(name, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['multi-shell-groups'] })
+      qc.invalidateQueries({ queryKey: ['options'] })
+      cancelEditMultiShell()
     },
   })
 
@@ -1380,13 +1413,22 @@ export default function SettingsPage() {
                                 </td>
                                 <td className="px-3 py-2 text-gray-500 max-w-xs truncate">{g.description}</td>
                                 <td className="px-3 py-2">
-                                  <button
-                                    onClick={() => mutateDeleteMultiShell.mutateAsync(name)}
-                                    className="text-gray-600 hover:text-red-400 transition-colors"
-                                    title="Delete group"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      onClick={() => startEditMultiShell(name, g)}
+                                      className="text-gray-600 hover:text-violet-400 transition-colors"
+                                      title="Edit group"
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => mutateDeleteMultiShell.mutateAsync(name)}
+                                      className="text-gray-600 hover:text-red-400 transition-colors"
+                                      title={g.builtin ? 'Hide built-in group' : 'Delete group'}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             ))}
@@ -1396,8 +1438,18 @@ export default function SettingsPage() {
                     )}
 
                     {/* Add multi-shell group form */}
-                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Create multi-shell group</p>
+                    <div id="multi-shell-form" className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                          {msEditingName ? `Edit “${msEditingName}”` : 'Create multi-shell group'}
+                        </p>
+                        {msEditingName && (
+                          <button
+                            onClick={cancelEditMultiShell}
+                            className="text-xs text-gray-500 hover:text-white"
+                          >Cancel</button>
+                        )}
+                      </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="col-span-2">
                           <label className="block text-xs text-gray-500 mb-1">Group name <span className="text-red-500">*</span></label>
@@ -1481,18 +1533,24 @@ export default function SettingsPage() {
 
                       <button
                         disabled={!msName.trim() || msShells.length === 0}
-                        onClick={() => mutateSaveMultiShell.mutateAsync({
-                          name: msName.trim(),
-                          shells: msShells.map(({ _key, ...s }) => s),
-                          description: msDesc,
-                          ...(msDefaultComms     ? { default_comms:          msDefaultComms }     : {}),
-                          ...(msDefaultSatType   ? { default_satellite_type: msDefaultSatType }   : {}),
-                        })}
+                        onClick={() => {
+                          const body = {
+                            name: msName.trim(),
+                            shells: msShells.map(({ _key, ...s }) => s),
+                            description: msDesc,
+                            ...(msDefaultComms     ? { default_comms:          msDefaultComms }     : {}),
+                            ...(msDefaultSatType   ? { default_satellite_type: msDefaultSatType }   : {}),
+                          }
+                          if (msEditingName) {
+                            return mutateUpdateMultiShell.mutateAsync({ name: msEditingName, body })
+                          }
+                          return mutateSaveMultiShell.mutateAsync(body)
+                        }}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium
                                    bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-40 transition-colors"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        Save group
+                        {msEditingName ? 'Update group' : 'Save group'}
                       </button>
                     </div>
                   </div>

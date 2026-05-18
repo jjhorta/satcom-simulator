@@ -185,6 +185,8 @@ export const getMultiShellGroups = () =>
   http.get<MultiShellGroupRecord>('/settings/multi-shells').then((r) => r.data)
 export const saveMultiShellGroup = (body: Record<string, unknown>) =>
   http.post<MultiShellGroupRecord>('/settings/multi-shells', body).then((r) => r.data)
+export const updateMultiShellGroup = (name: string, body: Record<string, unknown>) =>
+  http.put<MultiShellGroupRecord>(`/settings/multi-shells/${encodeURIComponent(name)}`, body).then((r) => r.data)
 export const deleteMultiShellGroup = (name: string) =>
   http.delete<MultiShellGroupRecord>(`/settings/multi-shells/${encodeURIComponent(name)}`).then((r) => r.data)
 export const resetMultiShellGroups = () =>

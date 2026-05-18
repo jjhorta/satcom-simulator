@@ -380,6 +380,23 @@ TCO_CONFIG = {
     }
 }
 
+# ── ISL (Inter-Satellite Link) CONFIGURATION ─────────────────────────────────
+ISL_CONFIG = {
+    "type": "optical",
+    "max_range_km": 5000.0,
+    "switching_delay_ms": 1.0,
+    "wavelength_nm": 1550,
+    "tx_power_w": 10.0,
+    "aperture_tx_cm": 10.0,
+    "aperture_rx_cm": 10.0,
+    "pointing_loss_db": 3.0,
+}
+
+# ── FIBER CONSTANTS (for latency baseline) ───────────────────────────────────
+SPEED_OF_LIGHT_VACUUM_KM_S = 299792.458
+SPEED_OF_LIGHT_FIBER_KM_S = 200000.0  # ~2/3 c in glass
+FIBER_ROUTING_FACTOR = 1.4
+
 # --- CONSTELLATION PRESETS ---
 CONSTELLATION_PRESETS = {
     "Iridium NEXT": {

@@ -1,0 +1,60 @@
+{
+  "source": {
+    "lat": 33.94,
+    "lon": -118.41,
+    "raw": "33.94,-118.41"
+  },
+  "destination": {
+    "lat": 38.81,
+    "lon": -77.3,
+    "raw": "38.81,-77.30"
+  },
+  "constellation_suffix": "walker_86_66_6",
+  "snapshots": 6,
+  "step_min": 5,
+  "duration_min": 30,
+  "isl_range_km": 5000.0,
+  "switching_delay_ms": 1.0,
+  "min_elev_deg": 10.0,
+  "availability_pct": 33.33333333333333,
+  "rtt": {
+    "min_ms": 28.610938841551345,
+    "p5_ms": 28.682662970845666,
+    "median_ms": 29.328180134494538,
+    "mean_ms": 29.328180134494538,
+    "p95_ms": 29.97369729814341,
+    "max_ms": 30.04542142743773,
+    "std_ms": 0.7172412929431928
+  },
+  "fiber": {
+    "great_circle_km": 3693.0272499535986,
+    "one_way_ms": 25.85119074967519,
+    "rtt_ms": 51.70238149935038,
+    "pct_below_fiber": 100.0
+  },
+  "representative_path": {
+    "total_one_way_ms": 14.305469420775673,
+    "total_rtt_ms": 28.610938841551345,
+    "num_hops": 2,
+    "uplink_ms": 7.610813279700529,
+    "downlink_ms": 6.694656141075145,
+    "isl_ms": 0.0,
+    "switching_ms": 0.0,
+    "hops": [
+      {
+        "type": "ground_to_sat",
+        "from": "SRC",
+        "to": "SAT-044",
+        "dist_km": 2281.6644205004627,
+        "delay_ms": 7.610813279700529
+      },
+      {
+        "type": "sat_to_ground",
+        "from": "SAT-044",
+        "to": "DST",
+        "dist_km": 2007.0074199977123,
+        "delay_ms": 6.694656141075145
+      }
+    ]
+  }
+}

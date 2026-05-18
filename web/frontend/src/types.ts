@@ -54,7 +54,7 @@ export interface OptionsResponse {
 }
 
 // ── Job models ─────────────────────────────────────────────────────────────────
-export type JobMode = 'heatmap' | 'heatmap-rf' | 'sky' | 'orbit' | 'track' | 'route' | 'report'
+export type JobMode = 'heatmap' | 'heatmap-rf' | 'sky' | 'orbit' | 'track' | 'route' | 'latency' | 'report'
 export type JobStatusValue = 'queued' | 'running' | 'completed' | 'failed'
 
 export interface JobFile {
@@ -175,6 +175,21 @@ export interface RouteRequest extends ConstellationParams {
   max_sats:            number
 }
 
+export interface LatencyRequest extends ConstellationParams {
+  from_location:       string
+  to_location:         string
+  duration:            number
+  step:                number
+  isl_range:           number
+  switching_delay:     number
+  min_elev:            number
+  no_fiber:            boolean
+  constellation?:      string | null
+  constellation_name?: string | null
+  shells?:             ShellDef[] | null
+  max_sats:            number
+}
+
 export type JobRequest =
   | { mode: 'heatmap';    params: HeatmapRequest }
   | { mode: 'heatmap-rf'; params: HeatmapRfRequest }
@@ -182,6 +197,7 @@ export type JobRequest =
   | { mode: 'orbit';      params: OrbitRequest }
   | { mode: 'track';      params: TrackRequest }
   | { mode: 'route';      params: RouteRequest }
+  | { mode: 'latency';    params: LatencyRequest }
 
 // ── Full Report ────────────────────────────────────────────────────────────────
 export interface ReportJobMap {

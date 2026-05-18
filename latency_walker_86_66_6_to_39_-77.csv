@@ -1,0 +1,7 @@
+time_min,rtt_ms,one_way_ms,num_hops,src_visible,dst_visible,path_found,uplink_ms,downlink_ms,isl_ms,switching_ms
+0,28.611,14.305,2,2,1,1,7.611,6.695,0.000,0.000
+5,,,0,2,0,0,,,,
+10,30.045,15.023,2,2,1,1,7.593,7.430,0.000,0.000
+15,,,0,2,0,0,,,,
+20,,,0,1,0,0,,,,
+25,,,0,2,0,0,,,,

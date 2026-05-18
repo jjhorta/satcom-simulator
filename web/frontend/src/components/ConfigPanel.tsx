@@ -235,6 +235,30 @@ function RouteFields({ p, set, opts }: { p: Record<string, unknown>; set: SetFn;
   )
 }
 
+function LatencyFields({ p, set, opts }: { p: Record<string, unknown>; set: SetFn; opts: OptionsResponse }) {
+  const isMultiActive = !!(p.constellation as string) || ((p.shells as ShellDef[])?.length ?? 0) > 0
+  const locOptions = opts.locations
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <SelectField label="From" value={p.from_location as string} options={locOptions} onChange={(v) => set('from_location', v)} />
+        <SelectField label="To"   value={p.to_location as string}   options={locOptions} onChange={(v) => set('to_location', v)} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <NumberField label="Duration" hint="min" value={p.duration as number} min={1} max={1440} onChange={(v) => set('duration', v)} />
+        <NumberField label="Step"     hint="min" value={p.step as number}     min={1} max={60}   onChange={(v) => set('step', v)} />
+        <NumberField label="ISL range" hint="km" value={p.isl_range as number} min={100} max={20000} onChange={(v) => set('isl_range', v)} />
+        <NumberField label="Switching delay" hint="ms" value={p.switching_delay as number} min={0} max={50} onChange={(v) => set('switching_delay', v)} />
+        <NumberField label="Min elevation" hint="°" value={p.min_elev as number} min={0} max={90} onChange={(v) => set('min_elev', v)} />
+        {isMultiActive && (
+          <NumberField label="Max sats" value={(p.max_sats as number) ?? 250} min={10} max={10000} onChange={(v) => set('max_sats', v)} />
+        )}
+      </div>
+      <Toggle label="Disable fiber baseline" value={p.no_fiber as boolean} onChange={(v) => set('no_fiber', v)} />
+    </div>
+  )
+}
+
 function buildDefaults(mode: JobMode, opts: OptionsResponse): Record<string, unknown> {
   const comms   = opts.comms_payloads[0]   ?? 'vdes'
   const weather = opts.weather_scenarios[0] ?? 'clear'
@@ -248,6 +272,7 @@ function buildDefaults(mode: JobMode, opts: OptionsResponse): Record<string, unk
     case 'orbit':   return { ...defaultConstellation, ...multiShellDefaults, comms, platform, min_elev: 10, duration: 2, trails: true, map: true, beams: false, fill: false }
     case 'track':   return { ...defaultConstellation, duration: 2, map: true }
     case 'route':   return { ...defaultConstellation, ...multiShellDefaults, route, comms, platform, weather, duration: 24, speed: 12, min_elev: 10, bidi: false, trails: false }
+    case 'latency': return { ...defaultConstellation, ...multiShellDefaults, from_location: loc, to_location: loc, duration: 60, step: 5, isl_range: 5000, switching_delay: 1.0, min_elev: 10, no_fiber: false }
     case 'report':  return { ...defaultConstellation, ...multiShellDefaults, comms, platform, reportRoutes: DEFAULT_REPORT_ROUTES }
   }
 }
@@ -261,6 +286,7 @@ const MODES: { value: JobMode; label: string }[] = [
   { value: 'orbit',      label: 'Orbit' },
   { value: 'track',      label: 'Track' },
   { value: 'route',   label: 'Route' },
+  { value: 'latency', label: 'Latency' },
   { value: 'report',  label: '📋 Report' },
 ]
 
@@ -550,6 +576,7 @@ export default function ConfigPanel() {
             {mode === 'orbit'   && <OrbitFields      p={params} set={set} opts={opts} />}
             {mode === 'track'   && <TrackFields      p={params} set={set} opts={opts} />}
             {mode === 'route'   && <RouteFields      p={params} set={set} opts={opts} />}
+            {mode === 'latency' && <LatencyFields    p={params} set={set} opts={opts} />}
             {mode === 'report'  && <FullReportFields p={params} set={set} opts={opts} />}
           </div>
         </section>
