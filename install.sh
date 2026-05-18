@@ -144,3 +144,18 @@ echo
 echo "Or use the convenience wrapper script:"
 echo "   ./run.sh sky --location lisbon --comms ais --weather clear"
 echo
+
+# Check Docker accessibility and give a clear warning if socket access fails
+if command -v docker &> /dev/null; then
+    echo
+    echo "Checking Docker access..."
+    if ! docker info > /dev/null 2>&1; then
+        echo "WARNING: Unable to access the Docker daemon (permission denied)."
+        echo "If you intended to run Docker commands, try prefixing with 'sudo' or add your user to the 'docker' group:" 
+        echo "  sudo usermod -aG docker \$(whoami) && newgrp docker"
+        echo "Alternatively, run the failing command with 'sudo' (you may be prompted for a password)."
+        echo
+    else
+        echo "Docker daemon is accessible."
+    fi
+fi

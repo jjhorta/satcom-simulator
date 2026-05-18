@@ -112,3 +112,15 @@ npm run dev        # → http://localhost:3000  (proxies /api → localhost:8000
 
 All job outputs are stored in the `outputs` Docker volume, mounted at `/app/outputs/{job_id}/`.
 Use `docker compose exec api ls /app/outputs` to inspect.
+
+## Notes & Troubleshooting
+
+- Nginx Proxy Manager (used on this host) may return a generic `404 Not Found` if there is no proxy host configured for your domain. If you see `404 Not Found\nnginx/1.27.5` when visiting your DuckDNS domain, check the Proxy Hosts list in the Nginx Proxy Manager admin UI (default credentials may be `admin` / `admin` on first login) and ensure a proxy host exists for your domain that forwards to the appropriate internal container (for example, `web-nginx-1:80` or directly to `frontend:3000`).
+
+- If Docker commands fail with "permission denied while trying to connect to the Docker daemon socket", ensure your user has access to the Docker socket. Either run the command with `sudo` or add your user to the `docker` group with:
+
+```bash
+sudo usermod -aG docker $(whoami) && newgrp docker
+```
+
+After adding to the `docker` group, log out and log back in for group changes to apply.
