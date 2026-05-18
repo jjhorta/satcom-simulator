@@ -20,10 +20,29 @@ def generate_autotags(mode: str, params: dict, presets: dict) -> list[str]:
     # ── 1. Simulation mode ─────────────────────────────────────────────────
     tags.add(mode)
 
+    # ── Multi-shell: tag constellation name and override sats/alt for tiers ─
+    _ms_sats: int | None = None
+    _ms_alt: float | None = None
+    constellation = params.get("constellation") or params.get("constellation_name")
+    shells = params.get("shells")
+    if constellation:
+        tags.add(_slug(str(constellation)))
+        tags.add("multi-shell")
+    if shells and isinstance(shells, list):
+        tags.add("multi-shell")
+        try:
+            _ms_sats = sum(int(s.get("sats", 0)) for s in shells)
+            alts = [float(s.get("altitude_km", s.get("altitude", 600))) for s in shells if s.get("altitude_km") or s.get("altitude")]
+            if alts:
+                _ms_alt = min(alts)  # classify by lowest shell
+        except (TypeError, ValueError):
+            pass
+
     # ── 2. Constellation preset match (reverse geometry lookup) ────────────
-    preset_name = _match_preset(params, presets)
-    if preset_name:
-        tags.add(_slug(preset_name))
+    if not constellation and not shells:
+        preset_name = _match_preset(params, presets)
+        if preset_name:
+            tags.add(_slug(preset_name))
 
     # ── 3. SSO ─────────────────────────────────────────────────────────────
     if params.get("sso"):
@@ -56,7 +75,7 @@ def generate_autotags(mode: str, params: dict, presets: dict) -> list[str]:
 
     # ── 9. Orbital altitude band ───────────────────────────────────────────
     try:
-        alt = float(params.get("altitude", 600))
+        alt = _ms_alt if _ms_alt is not None else float(params.get("altitude", 600))
     except (TypeError, ValueError):
         alt = 600.0
     if alt < 2000:
@@ -68,7 +87,7 @@ def generate_autotags(mode: str, params: dict, presets: dict) -> list[str]:
 
     # ── 10. Constellation size tier ────────────────────────────────────────
     try:
-        sats = int(params.get("sats", 0))
+        sats = _ms_sats if _ms_sats is not None else int(params.get("sats", 0))
     except (TypeError, ValueError):
         sats = 0
     if sats <= 20:

@@ -143,6 +143,66 @@ def delete_constellation_preset(outputs_dir: Path, name: str) -> None:
     save_overrides(outputs_dir, overrides)
 
 
+# ── Multi-shell group store ───────────────────────────────────────────────────
+
+def get_active_multi_shell_groups(simulator_root: Path, outputs_dir: Path) -> dict:
+    """
+    Return merged multi-shell groups.
+
+    Built-in groups come from sim.constants.KNOWN_CONSTELLATIONS.
+    User-created/deleted groups are stored in settings.json under "multi_shell_groups".
+    A group with {"deleted": True} hides the built-in entry.
+    User entries without "deleted" override or extend the built-in list.
+    """
+    sim_path = str(simulator_root)
+    if sim_path not in sys.path:
+        sys.path.insert(0, sim_path)
+    import importlib
+    c = importlib.import_module("sim.constants")
+    builtin: dict = getattr(c, "KNOWN_CONSTELLATIONS", {})
+
+    overrides = load_overrides(outputs_dir)
+    user_groups: dict = overrides.get("multi_shell_groups", {})
+
+    merged: dict = {}
+    # Start with built-ins
+    for name, shells in builtin.items():
+        override = user_groups.get(name, {})
+        if override.get("deleted"):
+            continue
+        merged[name] = {"shells": shells, "description": override.get("description", ""), "builtin": True}
+
+    # Add/override with user-created groups (non-deleted, non-builtin)
+    for name, group in user_groups.items():
+        if group.get("deleted"):
+            continue
+        if name not in merged:
+            merged[name] = {"shells": group.get("shells", []), "description": group.get("description", ""), "builtin": False}
+
+    return merged
+
+
+def save_multi_shell_group(outputs_dir: Path, name: str, shells: list, description: str = "") -> None:
+    """Save a user-defined multi-shell group."""
+    overrides = load_overrides(outputs_dir)
+    overrides.setdefault("multi_shell_groups", {})[name] = {
+        "shells": shells,
+        "description": description,
+    }
+    save_overrides(outputs_dir, overrides)
+
+
+def delete_multi_shell_group(outputs_dir: Path, name: str) -> None:
+    """Delete a multi-shell group (marks built-ins as deleted; removes user groups)."""
+    overrides = load_overrides(outputs_dir)
+    groups = overrides.setdefault("multi_shell_groups", {})
+
+    sim_path = str(outputs_dir.parent)  # heuristic — mark deleted for any name
+    # Just mark as deleted — builtin or user
+    groups[name] = {"deleted": True}
+    save_overrides(outputs_dir, overrides)
+
+
 def _deep_merge(base: Any, override: Any) -> Any:
     """Recursively merge override into base (in-place for dicts)."""
     if isinstance(base, dict) and isinstance(override, dict):

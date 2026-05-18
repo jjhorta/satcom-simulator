@@ -7,6 +7,8 @@ import type {
   JobListItem,
   JobRequest,
   HeatmapRow,
+  MultiShellGroupRecord,
+  ReportState,
 } from '../types'
 import { useAuthStore } from '../store/authStore'
 
@@ -80,6 +82,10 @@ export const fileUrl = (jobId: string, filename: string) =>
 export const fetchTco = (jobId: string) =>
   http.get<any>(`/jobs/${jobId}/tco`).then((r) => r.data)
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const fetchTles = (jobId: string) =>
+  http.get<any>(`/jobs/${jobId}/tles`).then((r) => r.data)
+
 export const fetchAiAnalysis = (jobId: string): Promise<string | null> =>
   http.get<{ text: string }>(`/jobs/${jobId}/ai-analysis`)
     .then((r) => r.data.text)
@@ -87,6 +93,62 @@ export const fetchAiAnalysis = (jobId: string): Promise<string | null> =>
 
 export const saveAiAnalysis = (jobId: string, text: string): Promise<void> =>
   http.post(`/jobs/${jobId}/ai-analysis`, { text }).then(() => undefined)
+
+// ── AI config (server-side key management) ────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const fetchAiConfig  = (): Promise<any> =>
+  http.get('/ai/config').then((r) => r.data)
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const updateAiConfig = (patch: any): Promise<any> =>
+  http.put('/ai/config', patch).then((r) => r.data)
+
+// ── Reports (server-side persistence) ────────────────────────────────────────
+export const fetchReports = (): Promise<ReportState[]> =>
+  http.get<ReportState[]>('/reports').then((r) => r.data)
+
+export const saveReport = (report: ReportState): Promise<ReportState[]> =>
+  http.post<ReportState[]>('/reports', report).then((r) => r.data)
+
+export const deleteReport = (reportId: string): Promise<ReportState[]> =>
+  http.delete<ReportState[]>(`/reports/${reportId}`).then((r) => r.data)
+
+// Share a report — generates a public access token
+export const shareReport = (reportId: string, password: string): Promise<{ token: string }> =>
+  http.post<{ token: string }>(`/reports/${reportId}/share`, { password }).then((r) => r.data)
+
+// Public (unauthenticated) — fetch a shared report using its token + password
+export const fetchSharedReport = (token: string, password: string): Promise<ReportState> =>
+  http.get<ReportState>(`/reports/shared/${token}`, { params: { password } }).then((r) => r.data)
+
+// Share default password settings
+export const getShareSettings  = (): Promise<{ has_default_password: boolean }> =>
+  http.get<{ has_default_password: boolean }>('/reports/share-settings').then((r) => r.data)
+
+export const updateShareSettings = (password: string): Promise<{ has_default_password: boolean }> =>
+  http.put<{ has_default_password: boolean }>('/reports/share-settings', { password }).then((r) => r.data)
+
+/** Construct a public URL for a file inside a shared report (no auth) */
+export const sharedFileUrl = (token: string, jobId: string, filename: string, password: string) =>
+  `${apiBase}/reports/shared/${encodeURIComponent(token)}/jobs/${jobId}/files/${encodeURIComponent(filename)}?password=${encodeURIComponent(password)}`
+
+/** List files for a job in a shared report (no auth) */
+export const fetchSharedJobFiles = (token: string, jobId: string, password: string): Promise<{ files: string[] }> =>
+  http.get(`/reports/shared/${encodeURIComponent(token)}/jobs/${jobId}/files`, { params: { password } }).then((r) => r.data)
+
+/** Fetch a CSV as JSON array for a job in a shared report (no auth) */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const fetchSharedCsv = (token: string, jobId: string, filename: string, password: string): Promise<any[]> =>
+  http.get(`/reports/shared/${encodeURIComponent(token)}/jobs/${jobId}/csv/${encodeURIComponent(filename)}`, { params: { password } }).then((r) => r.data)
+
+/** Fetch TCO data for a shared report (no auth) */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const fetchSharedTco = (token: string, jobId: string, password: string): Promise<any> =>
+  http.get(`/reports/shared/${encodeURIComponent(token)}/jobs/${jobId}/tco`, { params: { password } }).then((r) => r.data)
+
+/** Returns the base URL for the streaming AI proxy endpoint */
+export const aiStreamUrl = (jobId: string) =>
+  `${apiBase}/ai/jobs/${jobId}/stream`
 
 // ── Simulation physics settings ───────────────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -115,3 +177,13 @@ export const deleteConstellationPreset = (name: string) =>
   http.delete<any>(`/settings/constellations/${encodeURIComponent(name)}`).then((r) => r.data)
 export const resetConstellationPresets = () =>
   http.delete<any>('/settings/constellations').then((r) => r.data)
+
+// ── Multi-shell groups ──────────────────────────────────────────────────────────────
+export const getMultiShellGroups = () =>
+  http.get<MultiShellGroupRecord>('/settings/multi-shells').then((r) => r.data)
+export const saveMultiShellGroup = (body: Record<string, unknown>) =>
+  http.post<MultiShellGroupRecord>('/settings/multi-shells', body).then((r) => r.data)
+export const deleteMultiShellGroup = (name: string) =>
+  http.delete<MultiShellGroupRecord>(`/settings/multi-shells/${encodeURIComponent(name)}`).then((r) => r.data)
+export const resetMultiShellGroups = () =>
+  http.delete<MultiShellGroupRecord>('/settings/multi-shells').then((r) => r.data)

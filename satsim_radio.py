@@ -10,8 +10,9 @@ import argparse
 # sim.backends must be imported first to configure matplotlib before any pyplot use
 from sim import backends  # noqa: F401 - side-effect: sets up matplotlib Agg + fonts
 from sim.backends import set_graphics_backend, load_backend_modules
-from sim.constants import AVAILABLE_BACKENDS, COMMS_PAYLOADS, WEATHER_SCENARIOS
+from sim.constants import AVAILABLE_BACKENDS, COMMS_PAYLOADS, WEATHER_SCENARIOS, KNOWN_CONSTELLATIONS
 from sim.modes.heatmap import run_heatmap
+from sim.modes.heatmap_rf import run_heatmap_rf
 from sim.modes.sky import view_sky, run_coverage
 from sim.modes.orbit import view_orbit
 from sim.modes.track import view_track
@@ -44,6 +45,14 @@ def main():
     sky_parser.add_argument('--speed', type=int, default=60)
     sky_parser.add_argument('--trails', action='store_true', help='Draw satellite trails')
     sky_parser.add_argument('--save', action='store_true')
+    sky_parser.add_argument('--constellation', default=None,
+                            help='Named multi-shell constellation preset')
+    sky_parser.add_argument('--constellation-name', default=None, dest='constellation_name',
+                            help='Display name for a --shells multi-shell run')
+    sky_parser.add_argument('--shells', default=None, metavar='JSON',
+                            help='Inline JSON array of shell dicts')
+    sky_parser.add_argument('--max-sats', type=int, default=250,
+                            help='Max satellites to evaluate per timestep (default: 250)')
     
     # Heatmap mode
     heatmap_parser = subparsers.add_parser('heatmap', help='Global coverage heatmap (vectorized)')
@@ -58,7 +67,37 @@ def main():
     heatmap_parser.add_argument('--bidi', action='store_true')
     heatmap_parser.add_argument('--res', type=float, default=5.0, help='Grid resolution in degrees')
     heatmap_parser.add_argument('--min-elev', type=float, default=10.0, help='Minimum elevation angle (degrees)')
+    heatmap_parser.add_argument('--constellation', default=None,
+                                help='Named multi-shell constellation preset')
+    heatmap_parser.add_argument('--constellation-name', default=None, dest='constellation_name',
+                                help='Display name for a --shells multi-shell run')
+    heatmap_parser.add_argument('--shells', default=None, metavar='JSON',
+                                help='Inline JSON array of shell dicts')
+    heatmap_parser.add_argument('--max-sats', type=int, default=250,
+                                help='Max satellites to include (default: 250)')
     
+    # Heatmap-RF mode (same params as heatmap, adds full RF link budget)
+    heatmap_rf_parser = subparsers.add_parser('heatmap-rf', help='Global RF link budget heatmap')
+    heatmap_rf_parser.add_argument('--comms', default='vdes', choices=COMMS_PAYLOADS.keys())
+    heatmap_rf_parser.add_argument('--weather', default='clear', choices=WEATHER_SCENARIOS.keys())
+    heatmap_rf_parser.add_argument('--sats', type=int, default=66)
+    heatmap_rf_parser.add_argument('--planes', type=int, default=6)
+    heatmap_rf_parser.add_argument('--altitude', type=float, default=600.0)
+    heatmap_rf_parser.add_argument('--phasing', type=int, default=1)
+    heatmap_rf_parser.add_argument('--inclination', type=float, default=87.4)
+    heatmap_rf_parser.add_argument('--sso', action='store_true')
+    heatmap_rf_parser.add_argument('--bidi', action='store_true')
+    heatmap_rf_parser.add_argument('--res', type=float, default=5.0, help='Grid resolution in degrees')
+    heatmap_rf_parser.add_argument('--min-elev', type=float, default=10.0, help='Minimum elevation angle (degrees)')
+    heatmap_rf_parser.add_argument('--constellation', default=None,
+                                   help='Named multi-shell constellation preset')
+    heatmap_rf_parser.add_argument('--constellation-name', default=None, dest='constellation_name',
+                                   help='Display name for a --shells multi-shell run')
+    heatmap_rf_parser.add_argument('--shells', default=None, metavar='JSON',
+                                   help='Inline JSON array of shell dicts')
+    heatmap_rf_parser.add_argument('--max-sats', type=int, default=250,
+                                   help='Max satellites to include (default: 250)')
+
     # Orbit mode
     orbit_parser = subparsers.add_parser('orbit', help='3D orbital view')
     orbit_parser.add_argument('--sats', type=int, default=66)
@@ -75,9 +114,20 @@ def main():
     orbit_parser.add_argument('--trails', action='store_true', help='Draw orbital trails')
     orbit_parser.add_argument('--map', action='store_true', help='Show Earth with NASA texture')
     orbit_parser.add_argument('--beams', action='store_true', help='Show satellite coverage beams')
+    orbit_parser.add_argument('--fill', action='store_true', help='Fill coverage beams with semi-transparent caps (requires --beams --backend plotly)')
     orbit_parser.add_argument('--min-elev', type=float, default=10.0, help='Minimum elevation angle (degrees)')
     orbit_parser.add_argument('--duration', type=int, default=360, help='Simulation duration in minutes (default: 360 = 6 hours)')
     orbit_parser.add_argument('--save', action='store_true', help='Save to file')
+    # Multi-shell options (mutually exclusive with single-shell --sats/--planes/--inclination)
+    orbit_parser.add_argument('--constellation', default=None,
+                             help='Load a named multi-shell constellation preset (must be in KNOWN_CONSTELLATIONS)')
+    orbit_parser.add_argument('--constellation-name', default=None, dest='constellation_name',
+                             help='Display/label name for a --shells multi-shell run (no lookup performed)')
+    orbit_parser.add_argument('--shells', default=None, metavar='JSON',
+                             help='Inline JSON array of shell dicts: '
+                                  '[{"sats":50,"planes":5,"inclination":55,"altitude_km":525},...]')
+    orbit_parser.add_argument('--max-sats', type=int, default=250,
+                             help='Max satellites to render in animation (default: 250; reduce for performance)')
     
     # Track mode
     track_parser = subparsers.add_parser('track', help='Ground track view')
@@ -109,6 +159,14 @@ def main():
     route_parser.add_argument('--min-elev', type=float, default=10.0, help='Minimum elevation angle (degrees)')
     route_parser.add_argument('--trails', action='store_true', help='Draw satellite trails in animations')
     route_parser.add_argument('--save', action='store_true', help='Save individual waypoint animations (default: False)')
+    route_parser.add_argument('--constellation', default=None,
+                              help='Named multi-shell constellation preset')
+    route_parser.add_argument('--constellation-name', default=None, dest='constellation_name',
+                              help='Display name for a --shells multi-shell run')
+    route_parser.add_argument('--shells', default=None, metavar='JSON',
+                              help='Inline JSON array of shell dicts')
+    route_parser.add_argument('--max-sats', type=int, default=250,
+                              help='Max satellites to evaluate per timestep (default: 250)')
     
     args = parser.parse_args()
     
@@ -128,6 +186,8 @@ def main():
             view_sky(args)
     elif args.mode == 'heatmap':
         run_heatmap(args)
+    elif args.mode == 'heatmap-rf':
+        run_heatmap_rf(args)
     elif args.mode == 'orbit':
         view_orbit(args)
     elif args.mode == 'track':

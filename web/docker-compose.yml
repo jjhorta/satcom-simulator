@@ -64,9 +64,23 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
 
-  # NOTE: No nginx service here — routing is handled by the host Nginx Proxy
-  # Manager (NPM) container which is connected to this network directly.
+  # ── Nginx reverse proxy — landing page + app routing ─────────────────────
+  # NPM should forward all traffic for this host to nginx:80
   # Run once: sudo docker network connect web_default nginx-proxy-manager
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./landing:/usr/share/nginx/landing:ro
+    depends_on:
+      - frontend
+      - api
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
 volumes:
   redis_data:

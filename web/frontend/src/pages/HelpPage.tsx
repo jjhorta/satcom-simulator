@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { BookOpen, Satellite, Radio, Globe, BarChart2, Map, Navigation, HelpCircle, ArrowLeft } from 'lucide-react'
+import { BookOpen, Satellite, Radio, Globe, BarChart2, Map, Navigation, HelpCircle, ArrowLeft, Signal } from 'lucide-react'
 
 // ── Reusable section card ─────────────────────────────────────────────────────
 function Section({
@@ -155,6 +155,89 @@ export default function HelpPage() {
           "Bidirectional" (bidi) means the satellite both receives and transmits to the vessel —
           required for interactive applications like weather updates or route instructions.
         </p>
+      </Section>
+
+      {/* RF Link Budget */}
+      <Section icon={Signal} title="RF Link Budget — what the simulator actually computes">
+        <p>
+          Every contact between a satellite and a ground terminal is validated against a full
+          RF link budget. The simulator does not simply check whether a satellite is visible —
+          it checks whether the <em className="text-gray-300">signal margin is positive</em>,
+          meaning the received SNR exceeds the required threshold after accounting for all losses.
+        </p>
+
+        {/* Equation */}
+        <div className="bg-gray-800/60 rounded-lg px-4 py-3 font-mono text-xs text-gray-300 leading-loose mt-1">
+          <p className="text-indigo-300 font-semibold mb-1 font-sans">Downlink margin (dB)</p>
+          <p>M = P<sub>tx,dBm</sub> + G<sub>tx</sub> + G<sub>rx</sub></p>
+          <p className="pl-4">− FSPL &nbsp;(32.44 + 20·log d<sub>km</sub> + 20·log f<sub>MHz</sub>)</p>
+          <p className="pl-4">− L<sub>rain</sub> &nbsp;(ITU-R P.838 model)</p>
+          <p className="pl-4">− (−174 + 10·log B + NF) &nbsp;[noise floor]</p>
+          <p className="pl-4">− SNR<sub>req</sub></p>
+          <p className="mt-1 text-emerald-400">Link closes when M &gt; 0 dB</p>
+        </div>
+
+        <p className="mt-1">Every configurable parameter in Settings → Communications Link Budget feeds directly into this equation:</p>
+        <div className="space-y-2 mt-1">
+          <Param name="Sat Tx Power + Sat Tx Antenna Gain">
+            Together these form the satellite <span className="text-gray-300">EIRP</span>{' '}
+            (Effective Isotropic Radiated Power) — the transmit signal strength heading toward Earth.
+          </Param>
+          <Param name="Ground Rx Gain + Ground Noise Figure">
+            These define the receiver <span className="text-gray-300">G/T</span>{' '}
+            (antenna gain over noise temperature). Higher gain or lower noise figure = better
+            sensitivity. Noise floor = −174 dBm/Hz + 10·log(bandwidth) + noise figure.
+          </Param>
+          <Param name="DL / UL Frequency (MHz)">
+            Sets the free-space path loss (FSPL) and the ITU-R rain attenuation coefficients.
+            Higher frequency = more rain loss. AIS/VDES at 162 MHz is almost unaffected by rain;
+            Ka-band at 26 GHz can lose 20+ dB in tropical downpours.
+          </Param>
+          <Param name="Bandwidth (Hz)">
+            Determines the thermal noise floor. Wider bandwidth = more noise power collected.
+            AIS uses 25 kHz channels; VDES up to 100 kHz.
+          </Param>
+          <Param name="Required SNR DL / UL (dB)">
+            The minimum signal-to-noise ratio at which the receiver can decode the signal.
+            Equivalent to the C/N₀ or Eb/N₀ threshold for the chosen modulation and coding
+            scheme — set this to match your modem's performance curve.
+          </Param>
+        </div>
+
+        <p className="mt-2">
+          The simulation runs this budget for <span className="text-gray-300">every grid point × every timestep</span>,
+          across the entire simulation time window. The heatmap colour represents the fraction of
+          timesteps where at least one satellite closed the link — not just whether one was geometrically visible.
+        </p>
+
+        <div className="bg-gray-800/60 rounded-lg px-3 py-2 text-xs mt-1">
+          <p className="text-yellow-400 font-medium mb-1">What is and is not modelled</p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+            <div>
+              <p className="text-emerald-400 font-medium">✓ Included</p>
+              <ul className="list-disc list-inside space-y-0.5 text-gray-400 mt-0.5">
+                <li>EIRP (Tx power × antenna gain)</li>
+                <li>Receiver G/T (gain, noise figure)</li>
+                <li>Free-space path loss (FSPL)</li>
+                <li>Rain attenuation (ITU-R P.838)</li>
+                <li>Thermal noise floor</li>
+                <li>Required SNR / Eb/N₀ threshold</li>
+                <li>Slant range &amp; elevation geometry</li>
+                <li>Bidirectional (uplink + downlink)</li>
+              </ul>
+            </div>
+            <div>
+              <p className="text-red-400 font-medium">✗ Not yet modelled</p>
+              <ul className="list-disc list-inside space-y-0.5 text-gray-400 mt-0.5">
+                <li>Ionospheric scintillation</li>
+                <li>Pointing / implementation loss</li>
+                <li>Auto-derived modulation coding gain</li>
+                <li>Co-channel / adjacent-sat interference</li>
+                <li>Doppler shift</li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </Section>
 
       {/* Modes */}

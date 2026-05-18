@@ -8,26 +8,64 @@ from skyfield.api import EarthSatellite, load
 from skyfield.framelib import itrs
 
 from ..physics import calculate_sso_inclination
-from ..constellation import generate_walker_delta_tles
-from ..constants import COMMS_PAYLOADS
+from ..constellation import generate_walker_delta_tles, generate_multi_shell_tles
+from ..constants import COMMS_PAYLOADS, KNOWN_CONSTELLATIONS
 from ..plots.heatmap import save_heatmap_plot
 
 
 def run_heatmap(args):
     """Generate global coverage heatmap with vectorized physics"""
+    import json as _json
     print(f"🗺️  Generating heatmap (resolution: {args.res}° grid)...")
 
     ts = load.timescale()
     t0 = ts.utc(2024, 1, 1, 12, 0, 0)
 
-    if args.sso:
-        inc = calculate_sso_inclination(args.altitude)
-        print(f"🛰️  SSO Mode: Using inclination {inc:.2f}° for {args.altitude}km altitude")
-    else:
-        inc = args.inclination
+    # ── Multi-shell path ────────────────────────────────────────────────────
+    shells_cfg = None
+    if getattr(args, 'constellation', None):
+        shells_cfg = KNOWN_CONSTELLATIONS[args.constellation]
+        print(f"🌐 Multi-shell preset: '{args.constellation}' ({len(shells_cfg)} shells)")
+    elif getattr(args, 'shells', None):
+        try:
+            shells_cfg = _json.loads(args.shells)
+        except Exception as e:
+            print(f"❌ --shells JSON parse error: {e}")
+            return
 
-    tles = generate_walker_delta_tles(args.sats, args.planes, inc, args.altitude, args.phasing)
-    sats = [EarthSatellite(line1, line2, name, ts) for name, line1, line2 in tles]
+    if shells_cfg is not None:
+        constellation_name = (
+            getattr(args, 'constellation_name', None)
+            or getattr(args, 'constellation', None)
+            or 'custom'
+        )
+        # Normalise shell dicts
+        normalised = []
+        for sh in shells_cfg:
+            normalised.append({
+                'sats':        sh.get('sats', sh.get('num_sats', 12)),
+                'planes':      sh.get('planes', sh.get('num_planes', 3)),
+                'inclination': sh.get('inclination', sh.get('inc', 87.0)),
+                'altitude_km': sh.get('altitude_km', sh.get('alt', sh.get('altitude', 600.0))),
+                'phasing':     sh.get('phasing', 1),
+            })
+        tles_multi, _shell_map, _shell_meta = generate_multi_shell_tles(normalised)
+        max_sats = getattr(args, 'max_sats', 250)
+        tles_multi = tles_multi[:max_sats]
+        total_sats = sum(sh['sats'] for sh in normalised)
+        sats_list = [EarthSatellite(l1, l2, n, ts) for n, l1, l2 in tles_multi]
+        walker_suffix = f"multi_{constellation_name}_{total_sats}sats"
+        print(f"🌐 Multi-shell: {len(sats_list)} satellites across {len(normalised)} shells (rendering {len(sats_list)} of {total_sats})")
+    else:
+        # ── Single-shell path ───────────────────────────────────────────────
+        if args.sso:
+            inc = calculate_sso_inclination(args.altitude)
+            print(f"🛰️  SSO Mode: Using inclination {inc:.2f}° for {args.altitude}km altitude")
+        else:
+            inc = args.inclination
+        tles_single = generate_walker_delta_tles(args.sats, args.planes, inc, args.altitude, args.phasing)
+        sats_list = [EarthSatellite(l1, l2, n, ts) for n, l1, l2 in tles_single]
+        walker_suffix = f"walker_{int(inc)}_{args.sats}_{args.planes}"
 
     lats = np.arange(-90, 91, args.res)
     lons = np.arange(-180, 181, args.res)
@@ -51,7 +89,12 @@ def run_heatmap(args):
     chunk_size = 5000
 
     R_earth = 6378.137
-    r_sat = R_earth + args.altitude
+    # For multi-shell use the average altitude; for single-shell use args.altitude
+    if shells_cfg is not None:
+        avg_altitude = sum(sh['altitude_km'] for sh in normalised) / len(normalised)
+    else:
+        avg_altitude = args.altitude
+    r_sat = R_earth + avg_altitude
     min_elev = getattr(args, 'min_elev', 10.0)
     elev_rad = np.radians(min_elev)
 
@@ -68,7 +111,7 @@ def run_heatmap(args):
     print(f"⏱️  Simulating {steps} timesteps over {steps*12} minutes...")
 
     for t_idx, t in enumerate(times):
-        positions = [s.at(t).frame_xyz(itrs).km for s in sats]
+        positions = [s.at(t).frame_xyz(itrs).km for s in sats_list]
         sat_pos = np.column_stack(positions).T
 
         sat_norm = sat_pos / np.linalg.norm(sat_pos, axis=1)[:, np.newaxis]
@@ -87,7 +130,6 @@ def run_heatmap(args):
     availability_pct_flat = (coverage_counts / steps) * 100.0
     coverage_grid = availability_pct_flat.reshape(lat_grid.shape)
 
-    walker_suffix = f"walker_{int(inc)}_{args.sats}_{args.planes}"
     csv_filename = f"heatmap_{args.comms}_{walker_suffix}.csv"
 
     with open(csv_filename, 'w', newline='') as csvfile:

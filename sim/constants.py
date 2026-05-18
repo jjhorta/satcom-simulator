@@ -431,3 +431,60 @@ CONSTELLATION_PRESETS = {
         "description": "LusoSpace VDES Phase 2 expansion (600 km, 53°)"
     },
 }
+
+# ---------------------------------------------------------------------------
+# Multi-shell constellation presets
+# Each entry is a list of shell dicts compatible with generate_multi_shell_tles:
+#   sats, planes, inclination, altitude_km, phasing (opt), name (opt)
+# ---------------------------------------------------------------------------
+KNOWN_CONSTELLATIONS = {
+    # ── AST SpaceMobile (approximate, based on public FCC filings) ──────────
+    # 5 inclination bands, ~243 sats at 525 km, designed for broadband D2D
+    # Reference: FCC application SATMOD2021031900017
+    "ast_spacemobile": [
+        {"sats": 58,  "planes": 29,  "inclination": 5.0,  "altitude_km": 525, "phasing": 1, "name": "AST Near-equatorial 5°"},
+        {"sats": 40,  "planes": 20,  "inclination": 40.0, "altitude_km": 525, "phasing": 1, "name": "AST Mid-lat 40°"},
+        {"sats": 40,  "planes": 20,  "inclination": 55.0, "altitude_km": 525, "phasing": 1, "name": "AST Mid-lat 55°"},
+        {"sats": 60,  "planes": 12,  "inclination": 51.9, "altitude_km": 525, "phasing": 1, "name": "AST ISS-like 51.9°"},
+        {"sats": 45,  "planes": 15,  "inclination": 87.0, "altitude_km": 525, "phasing": 1, "name": "AST Polar 87°"},
+    ],
+    # ── Starlink Gen-1 (two primary shells) ─────────────────────────────────
+    # Simplified — actual constellation has 5+ shells; these are the two main ones
+    "starlink_gen1": [
+        {"sats": 720,  "planes": 72, "inclination": 53.0, "altitude_km": 550, "phasing": 1, "name": "Starlink 53° 550km"},
+        {"sats": 348,  "planes": 58, "inclination": 97.6, "altitude_km": 540, "phasing": 1, "name": "Starlink SSO 97.6°"},
+    ],
+    # ── OneWeb (Phase 1 operational constellation) ───────────────────────────
+    "oneweb_phase1": [
+        {"sats": 648, "planes": 18, "inclination": 87.9, "altitude_km": 1200, "phasing": 1, "name": "OneWeb 87.9° 1200km"},
+    ],
+    # ── Iridium NEXT (Walker Star, reference) ────────────────────────────────
+    "iridium_next": [
+        {"sats": 66, "planes": 6, "inclination": 86.4, "altitude_km": 780, "phasing": 1, "name": "Iridium NEXT 86.4°"},
+    ],
+    # ── LusoSpace AIS/VDES (two-phase build-out) ────────────────────────────
+    "lusospace_vdes": [
+        {"sats": 12, "planes": 3, "inclination": 53.0, "altitude_km": 600, "phasing": 1, "name": "LusoSpace Phase-1 53°"},
+        {"sats": 24, "planes": 8, "inclination": 53.0, "altitude_km": 600, "phasing": 1, "name": "LusoSpace Phase-2 53°"},
+    ],
+    # ── Custom demo: two crossed mid-inclination shells ──────────────────────
+    "demo_cross": [
+        {"sats": 24, "planes": 4, "inclination": 55.0, "altitude_km": 550, "phasing": 1, "name": "Cross Shell 55°"},
+        {"sats": 24, "planes": 4, "inclination": 40.0, "altitude_km": 550, "phasing": 1, "name": "Cross Shell 40°"},
+        {"sats": 12, "planes": 6, "inclination": 87.0, "altitude_km": 550, "phasing": 1, "name": "Cross Shell Polar 87°"},
+    ],
+    # ── Dream Constellation — tri-layer uniform global coverage ──────────────
+    # Three complementary inclinations whose ground-track density peaks interleave
+    # to produce a near-flat coverage distribution from equator to poles.
+    # Shell A (87.4°): global backbone + polar cap coverage — density peak ±87°
+    # Shell B (53.0°): mid-latitude fill — density peak ±53°
+    # Shell C (27.5°): equatorial band fill — density peak ±27°
+    # Altitudes staggered by 10 km to minimise conjunction probability.
+    # Total: 139 satellites across 15 planes.
+    # See documentation/dream_constellation.md for full design rationale.
+    "dream_constellation": [
+        {"sats": 66, "planes": 6, "inclination": 87.4, "altitude_km": 550, "phasing": 1, "name": "Dream Polar 87.4° — global backbone"},
+        {"sats": 45, "planes": 5, "inclination": 53.0, "altitude_km": 540, "phasing": 1, "name": "Dream Mid-lat 53° — latitude fill"},
+        {"sats": 28, "planes": 4, "inclination": 27.5, "altitude_km": 530, "phasing": 1, "name": "Dream Equatorial 27.5° — equatorial fill"},
+    ],
+}

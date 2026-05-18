@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Satellite, RotateCcw, Save, ChevronDown, ChevronRight, Plus, Trash2, Sparkles, Brain } from 'lucide-react'
+import { ArrowLeft, Satellite, RotateCcw, Save, ChevronDown, ChevronRight, Plus, Trash2, Sparkles, Brain, ShieldCheck, Pencil, Check, X as XIcon, Share2, Lock } from 'lucide-react'
 import { useAiStore, isAiConfigured } from '../store/aiStore'
-import { getSimSettings, updateSimSettings, resetCommsTech, resetWeather, getRoutes, updateRoute, resetRoute, getTcoSettings, resetTcoSettings, getConstellationPresets, saveConstellationPreset, deleteConstellationPreset, resetConstellationPresets } from '../api/client'
-import type { ConstellationPreset } from '../types'
+import { getSimSettings, updateSimSettings, resetCommsTech, resetWeather, getRoutes, updateRoute, resetRoute, getTcoSettings, resetTcoSettings, getConstellationPresets, saveConstellationPreset, deleteConstellationPreset, resetConstellationPresets, getMultiShellGroups, saveMultiShellGroup, deleteMultiShellGroup, resetMultiShellGroups, fetchAiConfig, updateAiConfig, getShareSettings, updateShareSettings } from '../api/client'
+import type { ConstellationPreset, ShellDef, MultiShellGroupRecord } from '../types'
 import 'leaflet/dist/leaflet.css'
 import { MapContainer, TileLayer, Polyline, useMap } from 'react-leaflet'
 import type { LatLngBoundsExpression } from 'leaflet'
@@ -370,8 +370,97 @@ function RouteCard({
 export default function SettingsPage() {
   const qc = useQueryClient()
   const [activeTab, setActiveTab] = useState<'comms' | 'weather' | 'routes' | 'tco' | 'constellations' | 'ai'>('comms')
-  const aiCfg = useAiStore()
-  const aiOk  = isAiConfigured(aiCfg)
+  const aiStatus = useAiStore()
+  const aiOk     = isAiConfigured(aiStatus)
+
+  // Load AI config status from backend on mount
+  useEffect(() => {
+    fetchAiConfig().then((cfg) => {
+      aiStatus.setStatus({
+        keyIsSet:     cfg.key_is_set,
+        maskedKey:    cfg.masked_key,
+        model:        cfg.model,
+        baseUrl:      cfg.base_url,
+        systemPrompt: cfg.system_prompt,
+      })
+    }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Local draft state for the AI settings form
+  const [aiDraft, setAiDraft] = useState({
+    api_key:       '',   // write-only: empty = keep existing
+    base_url:      '',
+    model:         '',
+    system_prompt: '',
+  })
+  const [aiSaving, setAiSaving] = useState(false)
+  const [aiSaved,  setAiSaved]  = useState(false)
+
+  // ── Share password state ───────────────────────────────────────────────────
+  const [shareHasDefault,  setShareHasDefault]  = useState(false)
+  const [sharePwd,         setSharePwd]         = useState('')
+  const [shareSaving,      setShareSaving]       = useState(false)
+  const [shareSaved,       setShareSaved]        = useState(false)
+  const [shareError,       setShareError]        = useState('')
+
+  useEffect(() => {
+    if (activeTab === 'ai') {
+      getShareSettings().then((s) => setShareHasDefault(s.has_default_password)).catch(() => {})
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
+
+  const saveSharePassword = async () => {
+    const pwd = sharePwd.trim()
+    if (pwd && pwd.length < 4) { setShareError('Password must be at least 4 characters.'); return }
+    setShareSaving(true); setShareError('')
+    try {
+      const result = await updateShareSettings(pwd)
+      setShareHasDefault(result.has_default_password)
+      setSharePwd('')
+      setShareSaved(true)
+      setTimeout(() => setShareSaved(false), 2000)
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        ?? (e as Error)?.message ?? 'Failed to save.'
+      setShareError(msg)
+    } finally {
+      setShareSaving(false)
+    }
+  }
+
+  // Sync draft from store when tab opens
+  useEffect(() => {
+    if (activeTab === 'ai') {
+      setAiDraft((d) => ({
+        ...d,
+        base_url:      aiStatus.baseUrl,
+        model:         aiStatus.model,
+        system_prompt: aiStatus.systemPrompt,
+      }))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
+
+  const saveAiSettings = async () => {
+    setAiSaving(true)
+    try {
+      const cfg = await updateAiConfig(aiDraft)
+      aiStatus.setStatus({
+        keyIsSet:     cfg.key_is_set,
+        maskedKey:    cfg.masked_key,
+        model:        cfg.model,
+        baseUrl:      cfg.base_url,
+        systemPrompt: cfg.system_prompt,
+      })
+      setAiDraft((d) => ({ ...d, api_key: '' }))  // clear key field after save
+      setAiSaved(true)
+      setTimeout(() => setAiSaved(false), 2500)
+    } finally {
+      setAiSaving(false)
+    }
+  }
   const [weatherDraft, setWeatherDraft] = useState<Record<string, number> | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -398,11 +487,33 @@ export default function SettingsPage() {
     queryFn: getConstellationPresets,
   })
 
+  const { data: multiShellGroups, isLoading: msLoading } = useQuery<MultiShellGroupRecord>({
+    queryKey: ['multi-shell-groups'],
+    queryFn: getMultiShellGroups,
+  })
+
+  // New multi-shell form state
+  type ShellDraft = ShellDef & { _key: number }
+  const emptyShell = (): ShellDraft => ({ _key: Date.now(), sats: 12, planes: 3, inclination: 53, altitude_km: 600, phasing: 1, name: '' })
+  const [msName, setMsName] = useState('')
+  const [msDesc, setMsDesc] = useState('')
+  const [msShells, setMsShells] = useState<ShellDraft[]>([emptyShell()])
+  const addMsShell = () => setMsShells((s) => [...s, emptyShell()])
+  const removeMsShell = (key: number) => setMsShells((s) => s.filter((sh) => sh._key !== key))
+  const updateMsShell = (key: number, field: keyof ShellDef, val: string | number) =>
+    setMsShells((s) => s.map((sh) => sh._key === key ? { ...sh, [field]: val } : sh))
+
   // New constellation form state
   const emptyPreset: ConstellationPreset & { name: string } = {
-    name: '', sats: 12, planes: 3, altitude: 600, inclination: 53.0, phasing: 1, sso: false, description: '',
+    name: '', sats: 12, planes: 3, altitude: 600, inclination: 53.0, phasing: 1, sso: false, description: '', default_comms: '', default_satellite_type: '',
   }
   const [newPreset, setNewPreset] = useState(emptyPreset)
+  const [editingName, setEditingName] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState<(ConstellationPreset & { name: string }) | null>(null)
+  const commsList = Object.keys(settings?.comms_payloads ?? {})
+  const platformsList = tcoSettings ? Object.keys(tcoSettings.satellite_platforms) : ['nanosat', 'microsat', 'smallsat', 'mediumsat', 'largesat']
+  const [msDefaultComms, setMsDefaultComms] = useState('')
+  const [msDefaultSatType, setMsDefaultSatType] = useState('')
 
   const mutateSave = useMutation({
     mutationFn: updateSimSettings,
@@ -447,6 +558,8 @@ export default function SettingsPage() {
       qc.invalidateQueries({ queryKey: ['constellation-presets'] })
       qc.invalidateQueries({ queryKey: ['options'] })
       setNewPreset(emptyPreset)
+      setEditingName(null)
+      setEditDraft(null)
     },
   })
 
@@ -462,6 +575,35 @@ export default function SettingsPage() {
     mutationFn: resetConstellationPresets,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['constellation-presets'] })
+      qc.invalidateQueries({ queryKey: ['options'] })
+    },
+  })
+
+  const mutateSaveMultiShell = useMutation({
+    mutationFn: saveMultiShellGroup,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['multi-shell-groups'] })
+      qc.invalidateQueries({ queryKey: ['options'] })
+      setMsName('')
+      setMsDesc('')
+      setMsShells([emptyShell()])
+      setMsDefaultComms('')
+      setMsDefaultSatType('')
+    },
+  })
+
+  const mutateDeleteMultiShell = useMutation({
+    mutationFn: deleteMultiShellGroup,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['multi-shell-groups'] })
+      qc.invalidateQueries({ queryKey: ['options'] })
+    },
+  })
+
+  const mutateResetMultiShell = useMutation({
+    mutationFn: resetMultiShellGroups,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['multi-shell-groups'] })
       qc.invalidateQueries({ queryKey: ['options'] })
     },
   })
@@ -912,35 +1054,166 @@ export default function SettingsPage() {
                           <th className="text-right px-3 py-2 font-medium">Inc (°)</th>
                           <th className="text-right px-3 py-2 font-medium">Phase</th>
                           <th className="text-center px-3 py-2 font-medium">SSO</th>
+                          <th className="text-left px-3 py-2 font-medium">Default Comms</th>
+                          <th className="text-left px-3 py-2 font-medium">Sat. Type</th>
                           <th className="text-left px-3 py-2 font-medium max-w-xs">Description</th>
                           <th className="px-3 py-2" />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-800">
                         {Object.entries(constellationPresets).map(([name, p]) => (
-                          <tr key={name} className="hover:bg-gray-900 transition-colors">
-                            <td className="px-3 py-2 font-mono text-indigo-300 whitespace-nowrap">{name}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-gray-300">{p.sats}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-gray-300">{p.planes}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-gray-300">{p.altitude}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-gray-300">{p.inclination}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-gray-300">{p.phasing}</td>
-                            <td className="px-3 py-2 text-center">
-                              {p.sso
-                                ? <span className="text-green-400">✓</span>
-                                : <span className="text-gray-700">—</span>}
-                            </td>
-                            <td className="px-3 py-2 text-gray-500 max-w-xs truncate">{p.description}</td>
-                            <td className="px-3 py-2">
-                              <button
-                                onClick={() => mutateDeleteConstellation.mutateAsync(name)}
-                                className="text-gray-600 hover:text-red-400 transition-colors"
-                                title="Delete preset"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </td>
-                          </tr>
+                          <>
+                            <tr key={name} className="hover:bg-gray-900 transition-colors">
+                              <td className="px-3 py-2 font-mono text-indigo-300 whitespace-nowrap">{name}</td>
+                              <td className="px-3 py-2 text-right tabular-nums text-gray-300">{p.sats}</td>
+                              <td className="px-3 py-2 text-right tabular-nums text-gray-300">{p.planes}</td>
+                              <td className="px-3 py-2 text-right tabular-nums text-gray-300">{p.altitude}</td>
+                              <td className="px-3 py-2 text-right tabular-nums text-gray-300">{p.inclination}</td>
+                              <td className="px-3 py-2 text-right tabular-nums text-gray-300">{p.phasing}</td>
+                              <td className="px-3 py-2 text-center">
+                                {p.sso
+                                  ? <span className="text-green-400">✓</span>
+                                  : <span className="text-gray-700">—</span>}
+                              </td>
+                              <td className="px-3 py-2 text-gray-400 font-mono text-xs whitespace-nowrap">
+                                {p.default_comms || <span className="text-gray-700">—</span>}
+                              </td>
+                              <td className="px-3 py-2 text-gray-400 font-mono text-xs whitespace-nowrap">
+                                {p.default_satellite_type || <span className="text-gray-700">—</span>}
+                              </td>
+                              <td className="px-3 py-2 text-gray-500 max-w-xs truncate">{p.description}</td>
+                              <td className="px-3 py-2">
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => {
+                                      if (editingName === name) {
+                                        setEditingName(null)
+                                        setEditDraft(null)
+                                      } else {
+                                        setEditingName(name)
+                                        setEditDraft({ name, ...p })
+                                      }
+                                    }}
+                                    className={`transition-colors ${editingName === name ? 'text-indigo-400 hover:text-indigo-300' : 'text-gray-600 hover:text-indigo-400'}`}
+                                    title={editingName === name ? 'Cancel edit' : 'Edit preset'}
+                                  >
+                                    {editingName === name
+                                      ? <XIcon className="w-3.5 h-3.5" />
+                                      : <Pencil className="w-3.5 h-3.5" />}
+                                  </button>
+                                  <button
+                                    onClick={() => mutateDeleteConstellation.mutateAsync(name)}
+                                    className="text-gray-600 hover:text-red-400 transition-colors"
+                                    title="Delete preset"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                            {editingName === name && editDraft && (
+                              <tr key={`${name}-edit`} className="bg-gray-950 border-b border-indigo-900">
+                                <td colSpan={11} className="px-4 py-4">
+                                  <div className="grid grid-cols-3 gap-x-6 gap-y-3">
+                                    <div>
+                                      <label className="block text-xs text-gray-500 mb-1">Name</label>
+                                      <input
+                                        type="text"
+                                        value={editDraft.name}
+                                        onChange={(e) => setEditDraft((d) => d ? { ...d, name: e.target.value } : d)}
+                                        className={inputCls + ' text-left'}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs text-gray-500 mb-1">Satellites</label>
+                                      <NumInput value={editDraft.sats} onChange={(v) => setEditDraft((d) => d ? { ...d, sats: Math.round(v) } : d)} />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs text-gray-500 mb-1">Orbital planes</label>
+                                      <NumInput value={editDraft.planes} onChange={(v) => setEditDraft((d) => d ? { ...d, planes: Math.round(v) } : d)} />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs text-gray-500 mb-1">Altitude (km)</label>
+                                      <NumInput value={editDraft.altitude} onChange={(v) => setEditDraft((d) => d ? { ...d, altitude: v } : d)} />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs text-gray-500 mb-1">Inclination (°)</label>
+                                      <NumInput value={editDraft.inclination} onChange={(v) => setEditDraft((d) => d ? { ...d, inclination: v } : d)} />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs text-gray-500 mb-1">Phasing</label>
+                                      <NumInput value={editDraft.phasing} onChange={(v) => setEditDraft((d) => d ? { ...d, phasing: Math.round(v) } : d)} />
+                                    </div>
+                                    <div className="flex items-center gap-3 pt-3">
+                                      <label className="relative inline-flex items-center cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={editDraft.sso}
+                                          onChange={(e) => setEditDraft((d) => d ? { ...d, sso: e.target.checked, inclination: e.target.checked ? 97.6 : d.inclination } : d)}
+                                          className="sr-only peer"
+                                        />
+                                        <div className="w-9 h-5 bg-gray-700 peer-checked:bg-indigo-600 rounded-full peer
+                                                        after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                                                        after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all
+                                                        peer-checked:after:translate-x-4" />
+                                        <span className="ml-2 text-xs text-gray-400">SSO</span>
+                                      </label>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs text-gray-500 mb-1">Default comms</label>
+                                      <select
+                                        className={inputCls}
+                                        value={editDraft.default_comms ?? ''}
+                                        onChange={(e) => setEditDraft((d) => d ? { ...d, default_comms: e.target.value } : d)}
+                                      >
+                                        <option value="">— no default —</option>
+                                        {commsList.map((c) => <option key={c}>{c}</option>)}
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs text-gray-500 mb-1">Satellite type</label>
+                                      <select
+                                        className={inputCls}
+                                        value={editDraft.default_satellite_type ?? ''}
+                                        onChange={(e) => setEditDraft((d) => d ? { ...d, default_satellite_type: e.target.value } : d)}
+                                      >
+                                        <option value="">— no default —</option>
+                                        {platformsList.map((c) => <option key={c}>{c}</option>)}
+                                      </select>
+                                    </div>
+                                    <div className="col-span-3">
+                                      <label className="block text-xs text-gray-500 mb-1">Description</label>
+                                      <input
+                                        type="text"
+                                        value={editDraft.description}
+                                        onChange={(e) => setEditDraft((d) => d ? { ...d, description: e.target.value } : d)}
+                                        className={inputCls + ' text-left'}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2 mt-4 pt-3 border-t border-gray-800">
+                                    <button
+                                      disabled={!editDraft.name.trim()}
+                                      onClick={() => mutateSaveConstellation.mutateAsync(editDraft as unknown as Record<string, unknown>)}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium
+                                                 bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-40 transition-colors"
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                      Save changes
+                                    </button>
+                                    <button
+                                      onClick={() => { setEditingName(null); setEditDraft(null) }}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium
+                                                 text-gray-400 bg-gray-800 hover:text-white hover:bg-gray-700 transition-colors"
+                                    >
+                                      <XIcon className="w-3.5 h-3.5" />
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </>
                         ))}
                       </tbody>
                     </table>
@@ -1008,6 +1281,28 @@ export default function SettingsPage() {
                           className={inputCls + ' text-left'}
                         />
                       </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Default comms</label>
+                        <select
+                          className={inputCls}
+                          value={newPreset.default_comms ?? ''}
+                          onChange={(e) => setNewPreset((d) => ({ ...d, default_comms: e.target.value }))}
+                        >
+                          <option value="">— no default —</option>
+                          {commsList.map((c) => <option key={c}>{c}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Satellite type</label>
+                        <select
+                          className={inputCls}
+                          value={newPreset.default_satellite_type ?? ''}
+                          onChange={(e) => setNewPreset((d) => ({ ...d, default_satellite_type: e.target.value }))}
+                        >
+                          <option value="">— no default —</option>
+                          {platformsList.map((c) => <option key={c}>{c}</option>)}
+                        </select>
+                      </div>
                     </div>
                     <button
                       disabled={!newPreset.name.trim()}
@@ -1031,6 +1326,176 @@ export default function SettingsPage() {
                       Reset to defaults
                     </button>
                   </div>
+
+                  {/* ── Multi-shell groups ── */}
+                  <div className="mt-8 pt-6 border-t border-gray-800 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider flex items-center gap-2">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Multi-Shell Constellations
+                      </p>
+                      <button
+                        onClick={() => mutateResetMultiShell.mutateAsync()}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded text-xs text-gray-500 bg-gray-800 hover:text-white hover:bg-gray-700 transition-colors"
+                      >
+                        <RotateCcw className="w-3 h-3" /> Reset built-ins
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Define groups of shells. Each group appears in the Orbit Animation
+                      "Named multi-shell preset" dropdown. Built-in groups (from the simulator)
+                      are shown in grey and can be deleted.
+                    </p>
+
+                    {msLoading && <p className="text-xs text-gray-500 animate-pulse">Loading groups…</p>}
+
+                    {multiShellGroups && Object.keys(multiShellGroups).length > 0 && (
+                      <div className="overflow-x-auto rounded-xl border border-gray-800">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-gray-900 text-gray-500 border-b border-gray-800">
+                              <th className="text-left px-3 py-2 font-medium">Name</th>
+                              <th className="text-right px-3 py-2 font-medium">Shells</th>
+                              <th className="text-right px-3 py-2 font-medium">Total sats</th>
+                              <th className="text-left px-3 py-2 font-medium">Default Comms</th>
+                              <th className="text-left px-3 py-2 font-medium">Sat. Type</th>
+                              <th className="text-left px-3 py-2 font-medium">Description</th>
+                              <th className="px-3 py-2" />
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-800">
+                            {Object.entries(multiShellGroups).map(([name, g]) => (
+                              <tr key={name} className="hover:bg-gray-900 transition-colors">
+                                <td className="px-3 py-2 font-mono whitespace-nowrap"
+                                    style={{ color: g.builtin ? '#a78bfa' : '#818cf8' }}>{name}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-gray-300">{g.shells.length}</td>
+                                <td className="px-3 py-2 text-right tabular-nums text-gray-300">
+                                  {g.shells.reduce((acc, s) => acc + (s.sats || 0), 0)}
+                                </td>
+                                <td className="px-3 py-2 text-gray-400 font-mono text-xs whitespace-nowrap">
+                                  {g.default_comms || <span className="text-gray-700">—</span>}
+                                </td>
+                                <td className="px-3 py-2 text-gray-400 font-mono text-xs whitespace-nowrap">
+                                  {g.default_satellite_type || <span className="text-gray-700">—</span>}
+                                </td>
+                                <td className="px-3 py-2 text-gray-500 max-w-xs truncate">{g.description}</td>
+                                <td className="px-3 py-2">
+                                  <button
+                                    onClick={() => mutateDeleteMultiShell.mutateAsync(name)}
+                                    className="text-gray-600 hover:text-red-400 transition-colors"
+                                    title="Delete group"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* Add multi-shell group form */}
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Create multi-shell group</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="col-span-2">
+                          <label className="block text-xs text-gray-500 mb-1">Group name <span className="text-red-500">*</span></label>
+                          <input type="text" value={msName} onChange={(e) => setMsName(e.target.value)}
+                            placeholder="e.g. my_leo_group" className={inputCls + ' text-left'} />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-xs text-gray-500 mb-1">Description</label>
+                          <input type="text" value={msDesc} onChange={(e) => setMsDesc(e.target.value)}
+                            placeholder="Short description" className={inputCls + ' text-left'} />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Default comms</label>
+                          <select
+                            className={inputCls}
+                            value={msDefaultComms}
+                            onChange={(e) => setMsDefaultComms(e.target.value)}
+                          >
+                            <option value="">— no default —</option>
+                            {commsList.map((c) => <option key={c}>{c}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Satellite type</label>
+                          <select
+                            className={inputCls}
+                            value={msDefaultSatType}
+                            onChange={(e) => setMsDefaultSatType(e.target.value)}
+                          >
+                            <option value="">— no default —</option>
+                            {platformsList.map((c) => <option key={c}>{c}</option>)}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Shells editor */}
+                      <div className="space-y-2">
+                        <p className="text-xs text-gray-500 font-medium">Shells</p>
+                        {msShells.map((sh, idx) => (
+                          <div key={sh._key} className="flex gap-2 items-end flex-wrap bg-gray-800/50 rounded-lg p-2">
+                            <div className="flex-1 min-w-[80px]">
+                              <label className="block text-xs text-gray-600 mb-0.5">Shell name</label>
+                              <input type="text" value={sh.name ?? ''}
+                                onChange={(e) => updateMsShell(sh._key, 'name', e.target.value)}
+                                placeholder={`Shell ${idx + 1}`}
+                                className="w-full px-2 py-1 rounded bg-gray-800 border border-gray-700 text-xs text-white focus:outline-none focus:ring-1 focus:ring-violet-500" />
+                            </div>
+                            <div className="w-16">
+                              <label className="block text-xs text-gray-600 mb-0.5">Sats</label>
+                              <NumInput value={sh.sats} onChange={(v) => updateMsShell(sh._key, 'sats', Math.round(v))} />
+                            </div>
+                            <div className="w-16">
+                              <label className="block text-xs text-gray-600 mb-0.5">Planes</label>
+                              <NumInput value={sh.planes} onChange={(v) => updateMsShell(sh._key, 'planes', Math.round(v))} />
+                            </div>
+                            <div className="w-20">
+                              <label className="block text-xs text-gray-600 mb-0.5">Alt (km)</label>
+                              <NumInput value={sh.altitude_km} onChange={(v) => updateMsShell(sh._key, 'altitude_km', v)} />
+                            </div>
+                            <div className="w-16">
+                              <label className="block text-xs text-gray-600 mb-0.5">Inc (°)</label>
+                              <NumInput value={sh.inclination} onChange={(v) => updateMsShell(sh._key, 'inclination', v)} />
+                            </div>
+                            <div className="w-14">
+                              <label className="block text-xs text-gray-600 mb-0.5">Phasing</label>
+                              <NumInput value={sh.phasing} onChange={(v) => updateMsShell(sh._key, 'phasing', Math.round(v))} />
+                            </div>
+                            {msShells.length > 1 && (
+                              <button onClick={() => removeMsShell(sh._key)}
+                                className="text-gray-600 hover:text-red-400 transition-colors pb-1">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <button onClick={addMsShell}
+                          className="flex items-center gap-1 text-xs text-gray-500 hover:text-violet-400 transition-colors">
+                          <Plus className="w-3 h-3" /> Add shell
+                        </button>
+                      </div>
+
+                      <button
+                        disabled={!msName.trim() || msShells.length === 0}
+                        onClick={() => mutateSaveMultiShell.mutateAsync({
+                          name: msName.trim(),
+                          shells: msShells.map(({ _key, ...s }) => s),
+                          description: msDesc,
+                          ...(msDefaultComms     ? { default_comms:          msDefaultComms }     : {}),
+                          ...(msDefaultSatType   ? { default_satellite_type: msDefaultSatType }   : {}),
+                        })}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium
+                                   bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-40 transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Save group
+                      </button>
+                    </div>
+                  </div>
                 </>
               )}
             </div>
@@ -1043,14 +1508,19 @@ export default function SettingsPage() {
                 <Brain className="w-4 h-4 text-indigo-400" />
                 <p className="text-sm font-medium text-white">AI Assistant configuration</p>
                 {aiOk
-                  ? <span className="text-xs text-emerald-400 bg-emerald-900/30 border border-emerald-700/40 px-2 py-0.5 rounded-full">Configured</span>
-                  : <span className="text-xs text-yellow-400 bg-yellow-900/30 border border-yellow-700/40 px-2 py-0.5 rounded-full">Not configured</span>
+                  ? <span className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-900/30 border border-emerald-700/40 px-2 py-0.5 rounded-full">
+                      <ShieldCheck className="w-3 h-3" /> Key configured
+                    </span>
+                  : <span className="text-xs text-yellow-400 bg-yellow-900/30 border border-yellow-700/40 px-2 py-0.5 rounded-full">No key set</span>
                 }
               </div>
-              <p className="text-xs text-gray-500">
-                Configure any OpenAI-compatible endpoint (OpenAI, Azure OpenAI, Ollama, LM Studio, etc.).
-                The API token is stored only in your browser's local storage and is never sent to the server.
-              </p>
+              <div className="flex items-start gap-2 bg-indigo-950/30 border border-indigo-800/40 rounded-lg p-3">
+                <ShieldCheck className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-indigo-300">
+                  The API key is stored server-side only and is never sent to the browser.
+                  The LLM is called from the server — your key cannot be intercepted from the network tab.
+                </p>
+              </div>
 
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
                 {/* Base URL */}
@@ -1058,13 +1528,13 @@ export default function SettingsPage() {
                   <label className="text-xs font-medium text-gray-400">Base URL</label>
                   <input
                     type="url"
-                    value={aiCfg.baseUrl}
-                    onChange={(e) => aiCfg.setConfig({ baseUrl: e.target.value })}
+                    value={aiDraft.base_url}
+                    onChange={(e) => setAiDraft((d) => ({ ...d, base_url: e.target.value }))}
                     placeholder="https://api.openai.com/v1"
                     className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm
                                text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500"
                   />
-                  <p className="text-xs text-gray-600">For Ollama: http://localhost:11434/v1 · For Azure: https://&lt;resource&gt;.openai.azure.com/openai/deployments/&lt;deployment&gt;</p>
+                  <p className="text-xs text-gray-600">Ollama: http://localhost:11434/v1 · Azure: https://&lt;resource&gt;.openai.azure.com/openai/deployments/&lt;deployment&gt;</p>
                 </div>
 
                 {/* Model */}
@@ -1072,8 +1542,8 @@ export default function SettingsPage() {
                   <label className="text-xs font-medium text-gray-400">Model</label>
                   <input
                     type="text"
-                    value={aiCfg.model}
-                    onChange={(e) => aiCfg.setConfig({ model: e.target.value })}
+                    value={aiDraft.model}
+                    onChange={(e) => setAiDraft((d) => ({ ...d, model: e.target.value }))}
                     placeholder="gpt-4o"
                     className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm
                                text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500"
@@ -1081,18 +1551,27 @@ export default function SettingsPage() {
                   <p className="text-xs text-gray-600">e.g. gpt-4o · gpt-4o-mini · llama3 · mistral</p>
                 </div>
 
-                {/* Token */}
+                {/* API Key — write-only */}
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-400">API Token / Key</label>
-                  <input
-                    type="password"
-                    value={aiCfg.token}
-                    onChange={(e) => aiCfg.setConfig({ token: e.target.value })}
-                    placeholder="sk-…"
-                    className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm
-                               text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500"
-                  />
-                  <p className="text-xs text-gray-600">Stored in browser localStorage only — never transmitted to the simulator server.</p>
+                  <label className="text-xs font-medium text-gray-400">API Key</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="password"
+                      value={aiDraft.api_key}
+                      onChange={(e) => setAiDraft((d) => ({ ...d, api_key: e.target.value }))}
+                      placeholder={aiStatus.maskedKey || 'Enter new key…'}
+                      className="flex-1 bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm
+                                 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500"
+                    />
+                    {aiOk && (
+                      <span className="text-xs text-gray-500 font-mono whitespace-nowrap">
+                        current: {aiStatus.maskedKey}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-600">
+                    Leave blank to keep the existing key. The raw key is never returned to the browser.
+                  </p>
                 </div>
 
                 {/* System prompt */}
@@ -1100,8 +1579,8 @@ export default function SettingsPage() {
                   <label className="text-xs font-medium text-gray-400">System prompt</label>
                   <textarea
                     rows={6}
-                    value={aiCfg.systemPrompt}
-                    onChange={(e) => aiCfg.setConfig({ systemPrompt: e.target.value })}
+                    value={aiDraft.system_prompt}
+                    onChange={(e) => setAiDraft((d) => ({ ...d, system_prompt: e.target.value }))}
                     className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-xs
                                text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500
                                font-mono leading-relaxed resize-y"
@@ -1110,18 +1589,68 @@ export default function SettingsPage() {
 
                 <div className="flex gap-2 pt-1 border-t border-gray-800">
                   <button
-                    onClick={() => aiCfg.setConfig({
-                      model: 'gpt-4o',
-                      baseUrl: 'https://api.openai.com/v1',
-                      token: '',
-                      systemPrompt: `You are an expert satellite communications engineer and business analyst.\nThe user will share simulation logs and outputs from a LEO constellation simulator.\nAnalyse the results, highlight key findings (coverage gaps, link budget margins, cost drivers),\nand provide concise, actionable insights for an executive audience.\nBe precise with numbers. Keep your response well-structured using markdown headings.`,
-                    })}
+                    onClick={saveAiSettings}
+                    disabled={aiSaving}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium
-                               text-gray-400 bg-gray-800 hover:text-white hover:bg-gray-700 transition-colors"
+                               bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
                   >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    Reset to defaults
+                    <Save className="w-3.5 h-3.5" />
+                    {aiSaving ? 'Saving…' : aiSaved ? 'Saved ✓' : 'Save to server'}
                   </button>
+                </div>
+              </div>
+
+              {/* ── Report Sharing ── */}
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4 mt-2">
+                <div className="flex items-center gap-2">
+                  <Share2 className="w-4 h-4 text-indigo-400" />
+                  <p className="text-sm font-medium text-white">Report Sharing — Default Password</p>
+                  {shareHasDefault && (
+                    <span className="text-xs text-emerald-400 bg-emerald-900/30 border border-emerald-700/40 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3" /> Password set
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500">
+                  When you share a report, the Share dialog will pre-fill with this password so you don't
+                  have to type it every time. You can always override it per-report.
+                </p>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-400">Default share password</label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-1 bg-gray-800 border border-gray-700 rounded-md px-3 py-2">
+                      <Lock className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                      <input
+                        type="password"
+                        value={sharePwd}
+                        onChange={(e) => setSharePwd(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveSharePassword() }}
+                        placeholder={shareHasDefault ? 'Enter new password to update…' : 'Set a default password…'}
+                        className="flex-1 bg-transparent text-sm text-white placeholder-gray-600 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  {shareError && <p className="text-xs text-red-400">{shareError}</p>}
+                </div>
+                <div className="flex gap-2 pt-1 border-t border-gray-800">
+                  <button
+                    onClick={saveSharePassword}
+                    disabled={shareSaving}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium
+                               bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    {shareSaving ? 'Saving…' : shareSaved ? 'Saved ✓' : 'Save password'}
+                  </button>
+                  {shareHasDefault && (
+                    <button
+                      onClick={() => { setSharePwd(''); saveSharePassword() }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium
+                                 text-gray-400 bg-gray-800 hover:text-white hover:bg-gray-700 transition-colors"
+                    >
+                      Clear password
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

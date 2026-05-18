@@ -30,7 +30,21 @@ def run_route_analysis(args):
     print("="*80)
 
     inc = calculate_sso_inclination(args.altitude) if args.sso else args.inclination
-    walker_suffix = f"walker_{int(inc)}_{args.sats}_{args.planes}"
+
+    # Use constellation name in suffix if multi-shell
+    if getattr(args, 'constellation', None):
+        walker_suffix = f"multi_{args.constellation}_{sum(sh.get('sats',0) for sh in __import__('json').loads(args.shells or '[]')) or args.constellation}sats" if getattr(args, 'shells', None) else f"multi_{args.constellation}"
+    elif getattr(args, 'shells', None):
+        try:
+            import json as _json
+            _shells = _json.loads(args.shells)
+            _total = sum(sh.get('sats', 0) for sh in _shells)
+            _name = getattr(args, 'constellation_name', None) or 'custom'
+            walker_suffix = f"multi_{_name}_{_total}sats"
+        except Exception:
+            walker_suffix = f"walker_{int(inc)}_{args.sats}_{args.planes}"
+    else:
+        walker_suffix = f"walker_{int(inc)}_{args.sats}_{args.planes}"
 
     original_save = args.save
     args.save = False

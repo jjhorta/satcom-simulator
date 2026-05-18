@@ -15,6 +15,9 @@ from ..settings_store import (
     reset_route,
     save_constellation_preset,
     delete_constellation_preset,
+    get_active_multi_shell_groups,
+    save_multi_shell_group,
+    delete_multi_shell_group,
 )
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
@@ -200,3 +203,56 @@ async def reset_constellations(
     """Reset all constellation presets to Python defaults."""
     reset_section(app_settings.outputs_dir, "constellation_presets")
     return get_active_constellation_presets(app_settings.simulator_root, app_settings.outputs_dir)
+
+
+# ── Multi-shell group endpoints ────────────────────────────────────────────
+
+@router.get("/multi-shells")
+async def get_multi_shells(
+    app_settings: Settings = Depends(get_settings),
+    _: str = Depends(get_current_user),
+):
+    """Return all active multi-shell groups (built-ins + user-created)."""
+    return get_active_multi_shell_groups(app_settings.simulator_root, app_settings.outputs_dir)
+
+
+@router.post("/multi-shells")
+async def create_multi_shell(
+    body: dict,
+    app_settings: Settings = Depends(get_settings),
+    _: str = Depends(get_current_user),
+):
+    """
+    Create or update a multi-shell group.
+    Body: {"name": str, "shells": [{sats, planes, inclination, altitude_km, phasing, name?}, ...], "description": str}
+    """
+    name = body.get("name", "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Group name is required")
+    shells = body.get("shells", [])
+    if not shells or not isinstance(shells, list):
+        raise HTTPException(status_code=400, detail="At least one shell is required")
+    description = body.get("description", "")
+    save_multi_shell_group(app_settings.outputs_dir, name, shells, description)
+    return get_active_multi_shell_groups(app_settings.simulator_root, app_settings.outputs_dir)
+
+
+@router.delete("/multi-shells/{name:path}")
+async def remove_multi_shell(
+    name: str,
+    app_settings: Settings = Depends(get_settings),
+    _: str = Depends(get_current_user),
+):
+    """Delete or hide a multi-shell group by name."""
+    delete_multi_shell_group(app_settings.outputs_dir, name)
+    return get_active_multi_shell_groups(app_settings.simulator_root, app_settings.outputs_dir)
+
+
+@router.delete("/multi-shells")
+async def reset_multi_shells(
+    app_settings: Settings = Depends(get_settings),
+    _: str = Depends(get_current_user),
+):
+    """Remove all user-created multi-shell overrides (restores built-ins)."""
+    reset_section(app_settings.outputs_dir, "multi_shell_groups")
+    return get_active_multi_shell_groups(app_settings.simulator_root, app_settings.outputs_dir)

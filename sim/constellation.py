@@ -141,3 +141,96 @@ def calculate_constellation_metrics(num_sats, num_planes, altitude_km, inclinati
             'steady_state_launches_per_year': launches_per_year_steady,
         }
     }
+
+
+# ---------------------------------------------------------------------------
+# Multi-shell constellation support
+# ---------------------------------------------------------------------------
+
+def generate_multi_shell_tles(shells):
+    """Generate TLEs for a multi-shell constellation.
+
+    Args:
+        shells: list of dicts, each with keys:
+            sats        (int)   — total satellites in this shell
+            planes      (int)   — number of orbital planes
+            inclination (float) — inclination in degrees
+            altitude_km (float) — orbital altitude
+            phasing     (int)   — Walker phasing parameter (default 1)
+            name        (str)   — human label, e.g. "Shell-1 55°" (optional)
+
+    Returns:
+        tles     : flat list of (sat_name, line1, line2) tuples
+        shell_map: dict mapping sat_name → shell_index (0-based)
+        shell_meta: list of dicts with shell summary info
+    """
+    tles = []
+    shell_map = {}
+    shell_meta = []
+
+    for shell_idx, shell in enumerate(shells):
+        sats       = shell['sats']
+        planes     = shell['planes']
+        inc        = shell['inclination']
+        alt        = shell['altitude_km']
+        phasing    = shell.get('phasing', 1)
+        label      = shell.get('name') or f"Shell-{shell_idx + 1} {inc:.1f}°"
+
+        shell_tles = generate_walker_delta_tles(sats, planes, inc, alt, phasing)
+
+        for orig_name, l1, l2 in shell_tles:
+            new_name = f"S{shell_idx + 1}-{orig_name}"
+            # Rewrite the TLE name field (first line of TLE block is just the name)
+            tles.append((new_name, l1, l2))
+            shell_map[new_name] = shell_idx
+
+        shell_meta.append({
+            'index':       shell_idx,
+            'label':       label,
+            'sats':        sats,
+            'planes':      planes,
+            'inclination': inc,
+            'altitude_km': alt,
+        })
+
+    return tles, shell_map, shell_meta
+
+
+def aggregate_constellation_metrics(shells, min_elev_deg=10.0):
+    """Compute and aggregate metrics across all shells.
+
+    Returns a dict with per-shell metrics plus combined totals.
+    """
+    per_shell = []
+    total_sats = 0
+
+    for shell in shells:
+        m = calculate_constellation_metrics(
+            num_sats=shell['sats'],
+            num_planes=shell['planes'],
+            altitude_km=shell['altitude_km'],
+            inclination_deg=shell['inclination'],
+            min_elev_deg=min_elev_deg,
+        )
+        per_shell.append(m)
+        total_sats += shell['sats']
+
+    # Aggregate coverage: combined coverage = 1 - Π(1 - p_i) approximation
+    combined_coverage_pct = 100.0 * (
+        1.0 - math.prod(1.0 - m['coverage']['coverage_per_sat_pct'] / 100.0 * m['constellation']['total_satellites']
+                        for m in per_shell)
+    )
+    combined_coverage_pct = min(combined_coverage_pct, 100.0)
+
+    # Best revisit = min max-gap across shells
+    best_revisit = min(m['coverage']['max_gap_time_min'] for m in per_shell)
+
+    return {
+        'per_shell': per_shell,
+        'combined': {
+            'total_satellites': total_sats,
+            'num_shells': len(shells),
+            'approx_combined_coverage_pct': round(combined_coverage_pct, 2),
+            'best_shell_revisit_min': round(best_revisit, 2),
+        }
+    }

@@ -142,6 +142,9 @@ def _build_command(
         "backend",   # handled explicitly before subcommand
         "mode",      # IS the subcommand
         "sso",       # handled explicitly as a boolean flag
+        "constellation",       # handled explicitly below
+        "constellation_name",  # handled explicitly below
+        "shells",    # handled explicitly below
         # Constellation geometry handled in explicit loop below
         "sats", "planes", "altitude", "phasing", "inclination",
     }
@@ -154,13 +157,27 @@ def _build_command(
     # ── Subcommand ─────────────────────────────────────────────────────────
     cmd.append(mode)
 
-    # ── Constellation geometry (subcommand-level, consistent across modes) ─
-    for key in ("sats", "planes", "altitude", "phasing", "inclination"):
-        val = params.get(key)
-        if val is not None:
-            cmd += [_flag(key), str(val)]
-    if params.get("sso"):
-        cmd.append("--sso")
+    # ── Constellation geometry or multi-shell preset ───────────────────────
+    constellation = params.get("constellation")
+    constellation_name = params.get("constellation_name")  # pure label, no lookup
+    shells = params.get("shells")
+    if shells and isinstance(shells, list) and len(shells) > 0:
+        # --shells always wins when provided (covers both user groups and named presets)
+        import json as _json
+        cmd += ["--shells", _json.dumps(shells)]
+        label = constellation_name or constellation
+        if label:
+            cmd += ["--constellation-name", str(label)]
+    elif constellation:
+        # Built-in KNOWN_CONSTELLATIONS name — pass directly
+        cmd += ["--constellation", str(constellation)]
+    else:
+        for key in ("sats", "planes", "altitude", "phasing", "inclination"):
+            val = params.get(key)
+            if val is not None:
+                cmd += [_flag(key), str(val)]
+        if params.get("sso"):
+            cmd.append("--sso")
 
     # ── Mode-specific flags ─────────────────────────────────────────────────
     for key, val in params.items():
@@ -218,6 +235,41 @@ def run_simulation(
         return {"status": "failed", "error": error_msg}
 
     try:
+        # Resolve user-created multi-shell constellation names to shell definitions.
+        # Built-in KNOWN_CONSTELLATIONS names are passed directly via --constellation.
+        # User-created groups (not in KNOWN_CONSTELLATIONS) are resolved here and
+        # passed as --shells JSON + --constellation-name for labeling.
+        params = dict(params)  # copy so we don't mutate caller's dict
+        constellation_param = params.get("constellation")
+        if constellation_param and not params.get("shells"):
+            # Check if it's a built-in name; if not, resolve from settings.json directly.
+            # We read settings.json here to avoid fragile relative-import paths in the worker.
+            known_names: set[str] = set()
+            try:
+                sim_path = str(_simulator_root(simulator_root))
+                import sys as _sys
+                if sim_path not in _sys.path:
+                    _sys.path.insert(0, sim_path)
+                import importlib as _importlib
+                _c = _importlib.import_module("sim.constants")
+                known_names = set(getattr(_c, "KNOWN_CONSTELLATIONS", {}).keys())
+            except Exception:
+                pass
+
+            if constellation_param not in known_names:
+                # User-created group — resolve shells from settings.json directly
+                settings_path = Path(outputs_dir) / "settings.json"
+                try:
+                    settings_data = json.loads(settings_path.read_text(encoding="utf-8"))
+                    user_groups = settings_data.get("multi_shell_groups", {})
+                    group = user_groups.get(constellation_param)
+                    if group and not group.get("deleted") and group.get("shells"):
+                        params["shells"] = group["shells"]
+                        params["constellation_name"] = constellation_param
+                        params["constellation"] = None  # clear so --shells path is taken
+                except Exception:
+                    pass  # settings.json missing or unreadable — argparse will give clear error
+
         cmd = _build_command(python, script, mode, params)
     except KeyError as exc:
         error_msg = f"Unknown mode: {exc}"

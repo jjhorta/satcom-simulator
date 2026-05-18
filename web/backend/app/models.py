@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Optional, Literal, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -36,6 +36,23 @@ class HeatmapRequest(ConstellationParams):
     res: float = Field(5.0, ge=0.5, le=20.0)
     min_elev: float = Field(10.0, ge=0.0, le=90.0)
     bidi: bool = False
+    constellation: Optional[str] = None
+    constellation_name: Optional[str] = None
+    shells: Optional[list[dict]] = None
+    max_sats: int = Field(250, ge=1, le=10000)
+
+
+class HeatmapRfRequest(ConstellationParams):
+    mode: Literal["heatmap-rf"] = "heatmap-rf"
+    comms: str = "vdes"
+    weather: str = "clear"
+    res: float = Field(5.0, ge=0.5, le=20.0)
+    min_elev: float = Field(10.0, ge=0.0, le=90.0)
+    bidi: bool = False
+    constellation: Optional[str] = None
+    constellation_name: Optional[str] = None
+    shells: Optional[list[dict]] = None
+    max_sats: int = Field(250, ge=1, le=10000)
 
 
 class SkyRequest(ConstellationParams):
@@ -48,6 +65,18 @@ class SkyRequest(ConstellationParams):
     duration: int = Field(3600, ge=60, le=604800)   # up to 7 days
     speed: int = Field(60, ge=1, le=3600)
     trails: bool = False
+    constellation: Optional[str] = None
+    constellation_name: Optional[str] = None
+    shells: Optional[list[dict]] = None
+    max_sats: int = Field(250, ge=1, le=10000)
+
+    @field_validator('coverage', mode='before')
+    @classmethod
+    def coerce_coverage(cls, v: object) -> Optional[str]:
+        """Accept bool from legacy frontends: True → 'all', False → None."""
+        if isinstance(v, bool):
+            return 'all' if v else None
+        return v  # type: ignore[return-value]
 
 
 class OrbitRequest(ConstellationParams):
@@ -57,8 +86,13 @@ class OrbitRequest(ConstellationParams):
     trails: bool = False
     map: bool = False
     beams: bool = False
+    fill: bool = False
     min_elev: float = Field(10.0, ge=0.0, le=90.0)
     duration: int = Field(360, ge=10, le=10080)   # up to 7 days
+    constellation: Optional[str] = None
+    constellation_name: Optional[str] = None
+    shells: Optional[list[dict]] = None
+    max_sats: int = Field(250, ge=1, le=10000)
 
 
 class TrackRequest(ConstellationParams):
@@ -77,9 +111,13 @@ class RouteRequest(ConstellationParams):
     speed: int = Field(60, ge=1, le=50)   # practical max for ships ~30 kn, allow up to 50
     min_elev: float = Field(10.0, ge=0.0, le=90.0)
     trails: bool = False
+    constellation: Optional[str] = None
+    constellation_name: Optional[str] = None
+    shells: Optional[list[dict]] = None
+    max_sats: int = Field(250, ge=1, le=10000)
 
 
-JobRequest = Union[HeatmapRequest, SkyRequest, OrbitRequest, TrackRequest, RouteRequest]
+JobRequest = Union[HeatmapRequest, HeatmapRfRequest, SkyRequest, OrbitRequest, TrackRequest, RouteRequest]
 
 
 # ── Job response models ───────────────────────────────────────────────────────
@@ -135,6 +173,20 @@ class ConstellationPreset(BaseModel):
     description: str = ""
 
 
+class ShellDef(BaseModel):
+    sats: int
+    planes: int
+    inclination: float
+    altitude_km: float
+    phasing: int = 1
+    name: Optional[str] = None
+
+
+class MultiShellPreset(BaseModel):
+    shells: list[ShellDef]
+    description: str = ""
+
+
 class OptionsResponse(BaseModel):
     comms_payloads: list[str]
     weather_scenarios: list[str]
@@ -144,3 +196,4 @@ class OptionsResponse(BaseModel):
     platforms: list[str]
     backends: list[str]
     constellation_presets: dict[str, ConstellationPreset] = {}
+    known_constellations: dict[str, MultiShellPreset] = {}

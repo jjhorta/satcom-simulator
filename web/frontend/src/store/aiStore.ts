@@ -1,35 +1,29 @@
+/**
+ * aiStore — tracks only the server-reported config status.
+ * The API key is NEVER stored in the browser.
+ * UI reads key_is_set + masked_key from the backend config endpoint.
+ */
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 
-const DEFAULT_SYSTEM_PROMPT =
-  `You are an expert satellite communications engineer and business analyst.
-The user will share simulation logs and outputs from a LEO constellation simulator.
-Analyse the results, highlight key findings (coverage gaps, link budget margins, cost drivers),
-and provide concise, actionable insights for an executive audience.
-Be precise with numbers. Keep your response well-structured using markdown headings.`
-
-interface AiConfig {
-  model:        string
-  baseUrl:      string
-  token:        string
+interface AiStatus {
+  keyIsSet:    boolean
+  maskedKey:   string
+  model:       string
+  baseUrl:     string
   systemPrompt: string
-  setConfig:    (patch: Partial<Omit<AiConfig, 'setConfig'>>) => void
+  setStatus: (patch: Partial<Omit<AiStatus, 'setStatus'>>) => void
 }
 
-export const useAiStore = create<AiConfig>()(
-  persist(
-    (set) => ({
-      model:        'gpt-4o',
-      baseUrl:      'https://api.openai.com/v1',
-      token:        '',
-      systemPrompt: DEFAULT_SYSTEM_PROMPT,
-      setConfig:    (patch) => set(patch),
-    }),
-    { name: 'ai-settings' },
-  ),
-)
+export const useAiStore = create<AiStatus>()((set) => ({
+  keyIsSet:     false,
+  maskedKey:    '',
+  model:        'gpt-4o',
+  baseUrl:      'https://api.openai.com/v1',
+  systemPrompt: '',
+  setStatus:    (patch) => set(patch),
+}))
 
-/** Returns true if the minimum required fields are set */
-export function isAiConfigured(cfg: Omit<AiConfig, 'setConfig'>): boolean {
-  return cfg.baseUrl.trim() !== '' && cfg.token.trim() !== '' && cfg.model.trim() !== ''
+/** Returns true if the backend has an API key configured */
+export function isAiConfigured(s: Pick<AiStatus, 'keyIsSet'>): boolean {
+  return s.keyIsSet
 }

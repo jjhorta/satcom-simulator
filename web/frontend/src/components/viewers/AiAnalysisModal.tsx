@@ -1,9 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { X, Sparkles, Copy, Check, AlertTriangle } from 'lucide-react'
 import { useAiStore } from '../../store/aiStore'
-import { fileUrl, fetchAiAnalysis, saveAiAnalysis } from '../../api/client'
+import { fetchAiAnalysis, aiStreamUrl } from '../../api/client'
 import { useAuthStore } from '../../store/authStore'
-import type { JobFile } from '../../types'
 
 // ── Simple markdown renderer (bold, headings, code, lists) ───────────────────
 function Markdown({ text }: { text: string }) {
@@ -80,13 +79,9 @@ function CopyButton({ text }: { text: string }) {
 // ── Main modal ────────────────────────────────────────────────────────────────
 export default function AiAnalysisModal({
   jobId,
-  jobMode,
-  files,
   onClose,
 }: {
   jobId:    string
-  jobMode:  string
-  files:    JobFile[]
   onClose:  () => void
 }) {
   const ai    = useAiStore()
@@ -96,29 +91,19 @@ export default function AiAnalysisModal({
   const [response, setResponse] = useState('')
   const [errMsg,   setErrMsg]   = useState('')
   const [cached,   setCached]   = useState(false)
-  const bottomRef    = useRef<HTMLDivElement>(null)
-  const accumRef     = useRef('')     // accumulates streaming text before saving
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const accumRef  = useRef('')
 
   // Load cached result from backend on mount
   useEffect(() => {
     fetchAiAnalysis(jobId).then((saved) => {
-      if (saved) {
-        setResponse(saved)
-        setStatus('done')
-        setCached(true)
-      }
+      if (saved) { setResponse(saved); setStatus('done'); setCached(true) }
     })
   }, [jobId])
 
-  // Auto-scroll as streaming text arrives
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [response])
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [response])
 
-  function clearAndRerun() {
-    setCached(false)
-    runAnalysis()
-  }
+  function clearAndRerun() { setCached(false); runAnalysis() }
 
   async function runAnalysis() {
     setStatus('loading')
@@ -127,140 +112,26 @@ export default function AiAnalysisModal({
     setCached(false)
     accumRef.current = ''
 
-    // ── 1. Collect log/txt content from output files ─────────────────────────
-    const textFiles = files.filter((f) => ['txt', 'log'].includes(f.type))
-    const csvFiles  = files.filter((f) => f.type === 'csv')
-    const chunks: string[] = [`# Simulation: ${jobMode} | Job ${jobId}\n`]
-
-    for (const f of textFiles) {
-      try {
-        const url = fileUrl(jobId, f.name)
-        const resp = await fetch(url, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        })
-        if (resp.ok) {
-          const txt = await resp.text()
-          chunks.push(`\n## File: ${f.name}\n\`\`\`\n${txt.slice(0, 8000)}\n\`\`\``)
-        }
-      } catch { /* skip unreadable files */ }
-    }
-
-    // ── 1b. Include CSV data (summarised for heatmaps, full for routes) ──────
-    for (const f of csvFiles) {
-      try {
-        const url = fileUrl(jobId, f.name)
-        const resp = await fetch(url, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        })
-        if (!resp.ok) continue
-        const raw  = await resp.text()
-        const lines = raw.trim().split('\n')
-        const header = lines[0]
-        const rows   = lines.slice(1)
-
-        if (f.name.startsWith('route_')) {
-          // Route CSV is small — send it fully as a markdown table
-          const cols = header.split(',')
-          const mdRows = rows.map((r) =>
-            '| ' + r.split(',').map((c) => c.trim()).join(' | ') + ' |'
-          ).join('\n')
-          const mdHeader = '| ' + cols.join(' | ') + ' |'
-          const mdSep    = '| ' + cols.map(() => '---').join(' | ') + ' |'
-          chunks.push(`\n## Data: ${f.name} (Route waypoints)\n${mdHeader}\n${mdSep}\n${mdRows}`)
-
-        } else if (f.name.startsWith('heatmap_')) {
-          // Heatmap CSV can be 2700+ rows — summarise statistically
-          const colNames = header.split(',')
-          const latIdx   = colNames.indexOf('latitude')
-          const pctIdx   = colNames.findIndex((c) => c.includes('availability_pct') || c.includes('pct'))
-
-          if (latIdx < 0 || pctIdx < 0) {
-            chunks.push(`\n## Data: ${f.name}\n(Could not parse columns: ${header})`)
-            continue
-          }
-
-          const data = rows.map((r) => {
-            const parts = r.split(',')
-            return { lat: parseFloat(parts[latIdx]), pct: parseFloat(parts[pctIdx]) }
-          }).filter((d) => !isNaN(d.lat) && !isNaN(d.pct))
-
-          const pcts     = data.map((d) => d.pct)
-          const mean     = pcts.reduce((a, b) => a + b, 0) / pcts.length
-          const min      = Math.min(...pcts)
-          const max      = Math.max(...pcts)
-          const below50  = pcts.filter((p) => p < 50).length
-          const below10  = pcts.filter((p) => p < 10).length
-          const above90  = pcts.filter((p) => p >= 90).length
-
-          // Latitude band summary (30° bands)
-          const bands = [
-            { label: 'Arctic   (60–90°N)', min: 60,  max: 90  },
-            { label: 'N.Temp.  (30–60°N)', min: 30,  max: 60  },
-            { label: 'Tropics  (30°S–30°N)', min: -30, max: 30 },
-            { label: 'S.Temp.  (30–60°S)', min: -60, max: -30 },
-            { label: 'Antarct. (60–90°S)', min: -90, max: -60 },
-          ]
-          const bandLines = bands.map((b) => {
-            const pts = data.filter((d) => d.lat >= b.min && d.lat < b.max)
-            if (!pts.length) return `  ${b.label}: no data`
-            const avg = pts.reduce((a, d) => a + d.pct, 0) / pts.length
-            const mn  = Math.min(...pts.map((d) => d.pct))
-            const mx  = Math.max(...pts.map((d) => d.pct))
-            return `  ${b.label}: avg=${avg.toFixed(1)}%  min=${mn.toFixed(1)}%  max=${mx.toFixed(1)}%`
-          }).join('\n')
-
-          chunks.push(
-            `\n## Data: ${f.name} (Heatmap statistics, ${data.length} grid points)\n` +
-            `Global: mean=${mean.toFixed(1)}%  min=${min.toFixed(1)}%  max=${max.toFixed(1)}%\n` +
-            `Points < 10% coverage: ${below10} (${(below10/data.length*100).toFixed(1)}%)\n` +
-            `Points < 50% coverage: ${below50} (${(below50/data.length*100).toFixed(1)}%)\n` +
-            `Points ≥ 90% coverage: ${above90} (${(above90/data.length*100).toFixed(1)}%)\n` +
-            `\nBy latitude band:\n${bandLines}`
-          )
-        } else {
-          // Generic CSV: send first 50 rows
-          const preview = [header, ...rows.slice(0, 50)].join('\n')
-          chunks.push(`\n## Data: ${f.name}\n\`\`\`csv\n${preview}\n\`\`\``)
-        }
-      } catch { /* skip */ }
-    }
-
-    if (chunks.length === 1) {
-      setErrMsg('No output files found for this simulation.')
-      setStatus('error')
-      return
-    }
-
-    const userContent = chunks.join('\n')
-
-    // ── 2. Call LLM (OpenAI-compatible) ─────────────────────────────────────
     try {
-      const endpoint = ai.baseUrl.replace(/\/$/, '') + '/chat/completions'
-      const body = {
-        model: ai.model,
-        stream: true,
-        messages: [
-          { role: 'system',  content: ai.systemPrompt },
-          { role: 'user',    content: userContent },
-        ],
-      }
-
-      const llmResp = await fetch(endpoint, {
+      // Call the server-side proxy — key never leaves the server
+      const url = aiStreamUrl(jobId)
+      const resp = await fetch(url, {
         method: 'POST',
         headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Bearer ${ai.token}`,
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify(body),
       })
 
-      if (!llmResp.ok) {
-        const errBody = await llmResp.text().catch(() => '')
-        throw new Error(`LLM API error ${llmResp.status}: ${errBody.slice(0, 300)}`)
+      if (!resp.ok) {
+        const errBody = await resp.text().catch(() => '')
+        let detail = errBody
+        try { detail = JSON.parse(errBody).detail ?? errBody } catch { /* ignore */ }
+        throw new Error(detail.slice(0, 300))
       }
 
-      // ── 3. Stream response ─────────────────────────────────────────────────
-      const reader  = llmResp.body?.getReader()
+      // Stream SSE from backend proxy
+      const reader  = resp.body?.getReader()
       const decoder = new TextDecoder()
       let   buffer  = ''
 
@@ -278,20 +149,22 @@ export default function AiAnalysisModal({
           if (data === '[DONE]') break
           try {
             const chunk = JSON.parse(data)
-            const delta = chunk.choices?.[0]?.delta?.content ?? ''
+            if (chunk.error) throw new Error(chunk.error)
+            const delta = chunk.delta ?? ''
             if (delta) {
               accumRef.current += delta
               setResponse((r) => r + delta)
             }
-          } catch { /* malformed chunk */ }
+          } catch (parseErr) {
+            if ((parseErr as Error).message !== 'Unexpected token') throw parseErr
+          }
         }
       }
 
       setStatus('done')
-      // Persist the completed analysis on the backend (cross-device)
-      saveAiAnalysis(jobId, accumRef.current).catch(() => { /* non-critical */ })
+      // Backend already persisted ai_analysis.txt during streaming
     } catch (e) {
-      setErrMsg((e as Error).message ?? 'Unknown error calling LLM.')
+      setErrMsg((e as Error).message ?? 'Unknown error.')
       setStatus('error')
     }
   }
@@ -326,28 +199,9 @@ export default function AiAnalysisModal({
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
           {/* Context note */}
-          <div className="text-xs text-gray-500 bg-gray-800/40 border border-gray-700/40 rounded-lg p-3 space-y-1">
-            <p>The following files will be sent to the LLM:</p>
-            {['txt', 'log'].some((t) => files.some((f) => f.type === t)) && (
-              <p><span className="text-gray-400 font-medium">Logs/text: </span>
-                <span className="text-gray-300">
-                  {files.filter((f) => ['txt','log'].includes(f.type)).map((f) => f.name).join(', ')}
-                </span>
-              </p>
-            )}
-            {files.some((f) => f.type === 'csv') && (
-              <p><span className="text-gray-400 font-medium">CSV data: </span>
-                <span className="text-gray-300">
-                  {files.filter((f) => f.type === 'csv').map((f) =>
-                    f.name.startsWith('heatmap_') ? `${f.name} (summarised)` :
-                    f.name.startsWith('route_')   ? `${f.name} (full table)` : f.name
-                  ).join(', ')}
-                </span>
-              </p>
-            )}
-            {!files.some((f) => ['txt','log','csv'].includes(f.type)) && (
-              <span className="text-yellow-400">No suitable files found.</span>
-            )}
+          <div className="text-xs text-gray-500 bg-gray-800/40 border border-gray-700/40 rounded-lg p-3">
+            Context is collected server-side: logs, dashboards, and CSV data are read from the job output directory
+            and sent directly to the LLM. Your API key never passes through the browser.
           </div>
 
           {/* Start button */}

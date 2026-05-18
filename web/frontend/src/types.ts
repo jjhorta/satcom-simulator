@@ -4,14 +4,42 @@ export interface TokenResponse { access_token: string; token_type: string }
 
 // ── Options (from GET /api/options) ──────────────────────────────────────────
 export interface ConstellationPreset {
+  sats:                  number
+  planes:                number
+  altitude:              number
+  inclination:           number
+  phasing:               number
+  sso:                   boolean
+  description:           string
+  default_comms?:        string
+  default_satellite_type?: string
+}
+
+export interface ShellDef {
   sats:        number
   planes:      number
-  altitude:    number
   inclination: number
+  altitude_km: number
   phasing:     number
-  sso:         boolean
-  description: string
+  name?:       string
 }
+
+export interface MultiShellPreset {
+  shells:                  ShellDef[]
+  description:             string
+  default_comms?:          string
+  default_satellite_type?: string
+}
+
+export interface MultiShellGroupEntry {
+  shells:                  ShellDef[]
+  description:             string
+  builtin:                 boolean
+  default_comms?:          string
+  default_satellite_type?: string
+}
+
+export type MultiShellGroupRecord = Record<string, MultiShellGroupEntry>
 
 export interface OptionsResponse {
   locations:              string[]
@@ -22,10 +50,11 @@ export interface OptionsResponse {
   platforms:              string[]
   backends:               string[]
   constellation_presets:  Record<string, ConstellationPreset>
+  known_constellations:   Record<string, MultiShellPreset>
 }
 
 // ── Job models ─────────────────────────────────────────────────────────────────
-export type JobMode = 'heatmap' | 'sky' | 'orbit' | 'track' | 'route'
+export type JobMode = 'heatmap' | 'heatmap-rf' | 'sky' | 'orbit' | 'track' | 'route' | 'report'
 export type JobStatusValue = 'queued' | 'running' | 'completed' | 'failed'
 
 export interface JobFile {
@@ -73,32 +102,57 @@ export interface ConstellationParams {
 }
 
 export interface HeatmapRequest extends ConstellationParams {
-  comms:     string
-  weather:   string
-  res:       number
-  min_elev:  number
-  bidi:      boolean
+  comms:               string
+  weather:             string
+  res:                 number
+  min_elev:            number
+  bidi:                boolean
+  constellation?:      string | null
+  constellation_name?: string | null
+  shells?:             ShellDef[] | null
+  max_sats:            number
+}
+
+export interface HeatmapRfRequest extends ConstellationParams {
+  comms:               string
+  weather:             string
+  res:                 number
+  min_elev:            number
+  bidi:                boolean
+  constellation?:      string | null
+  constellation_name?: string | null
+  shells?:             ShellDef[] | null
+  max_sats:            number
 }
 
 export interface SkyRequest extends ConstellationParams {
-  location:  string
-  coverage:  boolean
-  comms:     string
-  weather:   string
-  bidi:      boolean
-  duration:  number
-  speed:     number
-  trails:    boolean
+  location:            string
+  coverage:            boolean
+  comms:               string
+  weather:             string
+  bidi:                boolean
+  duration:            number
+  speed:               number
+  trails:              boolean
+  constellation?:      string | null
+  constellation_name?: string | null
+  shells?:             ShellDef[] | null
+  max_sats:            number
 }
 
 export interface OrbitRequest extends ConstellationParams {
-  comms:    string
-  platform: string
-  trails:   boolean
-  map:      boolean
-  beams:    boolean
-  min_elev: number
-  duration: number
+  comms:               string
+  platform:            string
+  trails:              boolean
+  map:                 boolean
+  beams:               boolean
+  fill:                boolean
+  min_elev:            number
+  duration:            number
+  constellation?:      string | null
+  constellation_name?: string | null
+  shells?:             ShellDef[] | null
+  max_sats:            number
 }
 
 export interface TrackRequest extends ConstellationParams {
@@ -107,22 +161,49 @@ export interface TrackRequest extends ConstellationParams {
 }
 
 export interface RouteRequest extends ConstellationParams {
-  route:    string
-  comms:    string
-  weather:  string
-  bidi:     boolean
-  duration: number
-  speed:    number
-  min_elev: number
-  trails:   boolean
+  route:               string
+  comms:               string
+  weather:             string
+  bidi:                boolean
+  duration:            number
+  speed:               number
+  min_elev:            number
+  trails:              boolean
+  constellation?:      string | null
+  constellation_name?: string | null
+  shells?:             ShellDef[] | null
+  max_sats:            number
 }
 
 export type JobRequest =
-  | { mode: 'heatmap'; params: HeatmapRequest }
-  | { mode: 'sky';     params: SkyRequest }
-  | { mode: 'orbit';   params: OrbitRequest }
-  | { mode: 'track';   params: TrackRequest }
-  | { mode: 'route';   params: RouteRequest }
+  | { mode: 'heatmap';    params: HeatmapRequest }
+  | { mode: 'heatmap-rf'; params: HeatmapRfRequest }
+  | { mode: 'sky';        params: SkyRequest }
+  | { mode: 'orbit';      params: OrbitRequest }
+  | { mode: 'track';      params: TrackRequest }
+  | { mode: 'route';      params: RouteRequest }
+
+// ── Full Report ────────────────────────────────────────────────────────────────
+export interface ReportJobMap {
+  heatmap:   string | null
+  heatmapRf: string | null
+  orbit:     string | null
+  routes:    Record<string, string>   // routeName → jobId
+}
+
+export interface ReportState {
+  reportId:       string
+  label:          string            // constellation name or 'custom'
+  title?:         string            // user-editable display name
+  tags?:          string[]
+  notes?:         string
+  shareToken?:    string            // opaque token for public sharing
+  createdAt:      string
+  params:         Record<string, unknown>  // constellation params used for all sub-jobs
+  selectedRoutes: string[]
+  jobs:           ReportJobMap
+  aiInsights?:    string
+}
 
 // ── Heatmap CSV row (from GET /api/jobs/:id/csv/:filename) ────────────────────
 export interface HeatmapRow {

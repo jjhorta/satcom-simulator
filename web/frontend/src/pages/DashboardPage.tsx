@@ -1,15 +1,46 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { LogOut, Satellite, HelpCircle, Settings } from 'lucide-react'
-import { useAuthStore } from '../store/authStore'
-import ConfigPanel from '../components/ConfigPanel'
-import JobList from '../components/JobList'
-import JobDetail from '../components/JobDetail'
+import { useAuthStore }  from '../store/authStore'
+import { useReportStore } from '../store/reportStore'
+import { useAiStore }    from '../store/aiStore'
+import { fetchAiConfig, fetchReports } from '../api/client'
+import ConfigPanel      from '../components/ConfigPanel'
+import JobList          from '../components/JobList'
+import ReportList       from '../components/ReportList'
+import JobDetail        from '../components/JobDetail'
+import FullReportViewer from '../components/viewers/FullReportViewer'
 
 export default function DashboardPage() {
-  const logout   = useAuthStore((s) => s.logout)
+  const logout      = useAuthStore((s) => s.logout)
+  const reports     = useReportStore((s) => s.reports)
+  const viewingId   = useReportStore((s) => s.viewingId)
+  const loadReports = useReportStore((s) => s.loadReports)
+  const aiStore     = useAiStore()
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [expanded,      setExpanded]      = useState(false)
+  const [activeTab,     setActiveTab]     = useState<'simulations' | 'reports'>('simulations')
+
+  // On login: load AI config + reports from server
+  useEffect(() => {
+    fetchAiConfig().then((cfg) => {
+      aiStore.setStatus({
+        keyIsSet:     cfg.key_is_set,
+        maskedKey:    cfg.masked_key,
+        model:        cfg.model,
+        baseUrl:      cfg.base_url,
+        systemPrompt: cfg.system_prompt,
+      })
+    }).catch(() => {})
+
+    fetchReports().then(loadReports).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Switch to Reports tab whenever a report is opened (new or existing)
+  useEffect(() => {
+    if (viewingId !== null) setActiveTab('reports')
+  }, [viewingId])
 
   function handleClose() {
     setSelectedJobId(null)
@@ -56,9 +87,36 @@ export default function DashboardPage() {
           <ConfigPanel />
         </aside>
 
-        {/* Job list — hidden when detail is expanded */}
-        <main className={`flex-1 overflow-y-auto p-6 ${expanded ? 'hidden' : ''}`}>
-          <JobList onSelectJob={setSelectedJobId} selectedJobId={selectedJobId} />
+        {/* Job list / Report list — hidden when detail is expanded */}
+        <main className={`flex-1 overflow-y-auto p-6 flex flex-col ${expanded ? 'hidden' : ''}`}>
+          {/* Tab bar */}
+          <div className="flex gap-1 mb-5 flex-shrink-0">
+            {(['simulations', 'reports'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  activeTab === tab
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                {tab === 'simulations' ? 'Simulations' : 'Reports'}
+                {tab === 'reports' && reports.length > 0 && (
+                  <span className="ml-0.5 bg-indigo-400/30 text-indigo-300 text-xs rounded-full px-1.5 py-0">
+                    {reports.length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Content */}
+          {activeTab === 'simulations' ? (
+            <JobList onSelectJob={setSelectedJobId} selectedJobId={selectedJobId} />
+          ) : (
+            <ReportList />
+          )}
         </main>
 
         {/* Job detail — full width when expanded */}
@@ -73,6 +131,9 @@ export default function DashboardPage() {
           </aside>
         )}
       </div>
+
+      {/* Full report viewer — overlays the entire viewport */}
+      {viewingId && <FullReportViewer />}
     </div>
   )
 }

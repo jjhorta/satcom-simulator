@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJob, fileUrl, updateJobMeta } from '../api/client'
 import type { JobFile } from '../types'
-import { X, FileText, Image, Code2, Table2, Pencil, Check, Maximize2, Minimize2, BarChart2, Sparkles } from 'lucide-react'
+import { X, FileText, Image, Code2, Table2, Pencil, Check, Maximize2, Minimize2, BarChart2, Sparkles, Globe } from 'lucide-react'
 import HeatmapViewer from './viewers/HeatmapViewer'
 import RouteViewer from './viewers/RouteViewer'
 import TextViewer from './viewers/TextViewer'
+import OrbitViewer3D from './viewers/OrbitViewer3D'
 import TcoDashboardModal from './viewers/TcoDashboardModal'
 import AiAnalysisModal from './viewers/AiAnalysisModal'
 import { useAiStore, isAiConfigured } from '../store/aiStore'
@@ -22,7 +23,7 @@ function fileIcon(type: string) {
 function FileViewer({ jobId, file }: { jobId: string; file: JobFile }) {
   const url = fileUrl(jobId, file.name)
 
-  if (file.type === 'csv' && file.name.startsWith('heatmap_')) {
+  if (file.type === 'csv' && (file.name.startsWith('heatmap_') || file.name.startsWith('heatmap_rf_'))) {
     return <HeatmapViewer jobId={jobId} filename={file.name} />
   }
   if (file.type === 'csv' && file.name.startsWith('route_')) {
@@ -103,6 +104,8 @@ export default function JobDetail({
   const logFile     = job.files.find(  (f) => f.type === 'log')
   const hasTco      = job.mode === 'orbit' && job.status === 'completed' &&
                       job.files.some((f) => f.name.startsWith('tco_') && f.name.endsWith('.json'))
+  const hasTles     = job.mode === 'orbit' && job.status === 'completed' &&
+                      job.files.some((f) => f.name.startsWith('tles_') && f.name.endsWith('.json'))
 
   const startEdit = () => {
     setDraftTitle(job.title ?? '')
@@ -294,6 +297,17 @@ export default function JobDetail({
         </div>
       )}
 
+      {/* ── 3D Orbit Viewer ──────────────────────────────────────────────── */}
+      {hasTles && (
+        <section className="space-y-2">
+          <h4 className="flex items-center gap-1.5 text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <Globe className="w-3.5 h-3.5" />
+            Interactive 3D Orbit
+          </h4>
+          <OrbitViewer3D jobId={jobId} />
+        </section>
+      )}
+
       {/* ── Output files ────────────────────────────────────────────────────── */}
       {outputFiles.length > 0 && (
         <section className="space-y-4">
@@ -329,8 +343,6 @@ export default function JobDetail({
       {showAi && (
         <AiAnalysisModal
           jobId={jobId}
-          jobMode={job.mode}
-          files={job.files}
           onClose={() => setShowAi(false)}
         />
       )}

@@ -168,8 +168,78 @@ def _create_coverage_circle_plotly(lat_deg, lon_deg, radius_km):
     return x, y, z
 
 
-def create_3d_orbit_plot(sats, args, inc, walker_suffix, metrics=None, tco_data=None):
-    """Create interactive plotly 3D orbit visualization"""
+def _create_coverage_fill_plotly(lat_deg, lon_deg, radius_km, color, opacity=0.25):
+    """Create a filled spherical cap as go.Mesh3d for Plotly 3D.
+    Uses a triangulated fan from the nadir (sub-satellite) point on the
+    Earth surface to the coverage-circle edge points.
+    """
+    import plotly.graph_objects as go
+
+    earth_radius = 6378.137
+    lat_rad = np.radians(lat_deg)
+    lon_rad = np.radians(lon_deg)
+    ang_radius = radius_km / earth_radius
+
+    # Nadir point — centre of the cap on the Earth surface
+    cx0 = earth_radius * np.cos(lat_rad) * np.cos(lon_rad)
+    cy0 = earth_radius * np.cos(lat_rad) * np.sin(lon_rad)
+    cz0 = earth_radius * np.sin(lat_rad)
+
+    num_points = 36
+    angles = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
+    circle_lats, circle_lons = [], []
+    for angle in angles:
+        lat_new = np.arcsin(np.sin(lat_rad) * np.cos(ang_radius) +
+                            np.cos(lat_rad) * np.sin(ang_radius) * np.cos(angle))
+        lon_new = lon_rad + np.arctan2(np.sin(angle) * np.sin(ang_radius) * np.cos(lat_rad),
+                                        np.cos(ang_radius) - np.sin(lat_rad) * np.sin(lat_new))
+        circle_lats.append(lat_new)
+        circle_lons.append(lon_new)
+
+    circle_lats = np.array(circle_lats)
+    circle_lons = np.array(circle_lons)
+    ex = earth_radius * np.cos(circle_lats) * np.cos(circle_lons)
+    ey = earth_radius * np.cos(circle_lats) * np.sin(circle_lons)
+    ez = earth_radius * np.sin(circle_lats)
+
+    # Vertices: index 0 = nadir centre, indices 1..N = edge ring
+    xs = np.concatenate([[cx0], ex])
+    ys = np.concatenate([[cy0], ey])
+    zs = np.concatenate([[cz0], ez])
+
+    # Fan triangulation: (0, i, i+1) with wraparound on the last triangle
+    ii = [0] * num_points
+    jj = list(range(1, num_points + 1))
+    kk = list(range(2, num_points + 1)) + [1]
+
+    return go.Mesh3d(
+        x=xs, y=ys, z=zs,
+        i=ii, j=jj, k=kk,
+        color=color,
+        opacity=opacity,
+        showscale=False,
+        hoverinfo='skip',
+        flatshading=True,
+        lighting=dict(ambient=1.0, diffuse=0.0, specular=0.0),
+        showlegend=False,
+    )
+
+
+def create_3d_orbit_plot(sats, args, inc, walker_suffix, metrics=None, tco_data=None,
+                         shell_map=None, shell_meta=None, shell_coverage_radii=None):
+    """Create interactive plotly 3D orbit visualization.
+
+    Args:
+        sats                : list of EarthSatellite objects
+        args                : parsed CLI args
+        inc                 : inclination (float or None for multi-shell)
+        walker_suffix       : filename suffix string
+        metrics             : single-shell metrics dict (or None)
+        tco_data            : TCO dict (or None)
+        shell_map           : dict sat_name → shell_index (multi-shell only)
+        shell_meta          : list of shell metadata dicts (multi-shell only)
+        shell_coverage_radii: dict shell_index → coverage_radius_km (multi-shell only)
+    """
     backends.load_backend_modules('plotly')
     if not backends.plotly_available:
         print("ℹ️  Plotly unavailable, falling back to matplotlib.")
@@ -181,14 +251,48 @@ def create_3d_orbit_plot(sats, args, inc, walker_suffix, metrics=None, tco_data=
     ts = load.timescale()
     t0 = ts.utc(2024, 1, 1, 12, 0, 0)
 
-    colors = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue',
-              'purple', 'magenta', 'pink', 'brown', 'gray', 'olive']
-    num_sats = min(len(sats), 12)
-    show_trails = getattr(args, 'trails', False)
-    show_map = getattr(args, 'map', False)
-    show_beams = getattr(args, 'beams', False)
+    # ── Colour palette ──────────────────────────────────────────────────────
+    # 12 visually distinct colours for single-shell cycle or shell colouring
+    SHELL_COLORS = [
+        '#00d4ff',   # cyan
+        '#ff6b35',   # orange
+        '#7eff6b',   # lime
+        '#ff4da6',   # pink
+        '#a78bfa',   # violet
+        '#fbbf24',   # amber
+        '#34d399',   # emerald
+        '#f87171',   # red
+        '#60a5fa',   # blue
+        '#e879f9',   # fuchsia
+        '#4ade80',   # green
+        '#fb923c',   # orange-red
+    ]
 
-    print("🎨 Generating interactive 3D orbit plot...")
+    is_multi_shell = shell_map is not None and shell_meta is not None
+
+    # Max sats cap (CLI --max-sats or default 250)
+    max_sats = getattr(args, 'max_sats', 250)
+    num_sats = min(len(sats), max_sats)
+
+    show_trails = getattr(args, 'trails', False)
+    show_map    = getattr(args, 'map', False)
+    show_beams  = getattr(args, 'beams', False)
+    show_fill   = getattr(args, 'fill', False)
+
+    # Build per-satellite colour list
+    sat_colors = []
+    if is_multi_shell:
+        for sat in sats[:num_sats]:
+            sidx = shell_map.get(sat.name, 0)
+            sat_colors.append(SHELL_COLORS[sidx % len(SHELL_COLORS)])
+    else:
+        for i in range(num_sats):
+            sat_colors.append(SHELL_COLORS[i % len(SHELL_COLORS)])
+
+    # Auto-reduce frames for large constellations (performance)
+    num_frames = 20 if num_sats > 100 else (30 if show_beams else 60)
+
+    print(f"🎨 Generating interactive 3D orbit plot ({num_sats} satellites, {num_frames} frames)...")
 
     # Pre-calculate satellite positions
     all_sat_positions = []
@@ -201,16 +305,35 @@ def create_3d_orbit_plot(sats, args, inc, walker_suffix, metrics=None, tco_data=
         all_sat_positions.append(np.array(traj))
 
     # Initial traces: satellite markers (+ optional trails)
+    # In multi-shell mode: one legend group per shell; in single-shell: one entry per sat
     traces = []
+    _legend_shells_shown = set()   # track which shell legend entries are already added
+
     for i in range(num_sats):
+        color = sat_colors[i]
+        if is_multi_shell:
+            sat_name  = sats[i].name
+            sidx      = shell_map.get(sat_name, 0)
+            smeta     = shell_meta[sidx] if sidx < len(shell_meta) else {}
+            leg_label = smeta.get('label', f'Shell {sidx+1}')
+            show_leg  = sidx not in _legend_shells_shown
+            if show_leg:
+                _legend_shells_shown.add(sidx)
+            leg_group = f"shell_{sidx}"
+        else:
+            leg_label = f"Sat {i+1}"
+            show_leg  = True
+            leg_group = f"sat_{i}"
+
         traces.append(go.Scatter3d(
             x=[all_sat_positions[i][0, 0]],
             y=[all_sat_positions[i][0, 1]],
             z=[all_sat_positions[i][0, 2]],
             mode='markers',
-            marker=dict(size=8, color=colors[i % len(colors)]),
-            name=f"Sat {i+1}",
-            showlegend=True
+            marker=dict(size=5 if is_multi_shell else 8, color=color),
+            name=leg_label,
+            legendgroup=leg_group,
+            showlegend=show_leg,
         ))
         if show_trails:
             traces.append(go.Scatter3d(
@@ -218,7 +341,7 @@ def create_3d_orbit_plot(sats, args, inc, walker_suffix, metrics=None, tco_data=
                 y=[all_sat_positions[i][0, 1]],
                 z=[all_sat_positions[i][0, 2]],
                 mode='lines',
-                line=dict(width=2, color=colors[i % len(colors)]),
+                line=dict(width=1, color=sat_colors[i]),
                 showlegend=False,
                 hoverinfo='skip'
             ))
@@ -319,29 +442,46 @@ def create_3d_orbit_plot(sats, args, inc, walker_suffix, metrics=None, tco_data=
     _add_earth_to_traces(traces, x, y, z, 0, coastline_data, show_map, show_beams)
 
     # Coverage beams at t=0
-    coverage_radius = None
+    # In multi-shell mode: per-satellite coverage radius from shell_coverage_radii
+    # In single-shell mode: one radius for all sats
+    coverage_radius = None   # single-shell fallback
     if show_beams:
         min_elev = getattr(args, 'min_elev', 10.0)
-        coverage_radius = calculate_coverage_footprint(args.altitude, min_elev)
-        print(f"🎯 Coverage beams: radius={coverage_radius:.1f} km @ {min_elev}° elevation")
+        if not is_multi_shell:
+            coverage_radius = calculate_coverage_footprint(args.altitude, min_elev)
+            print(f"🎯 Coverage beams: radius={coverage_radius:.1f} km @ {min_elev}° elevation")
+        else:
+            print(f"🎯 Coverage beams: per-shell radii @ {min_elev}° elevation")
+        if show_fill:
+            print("🎨 Coverage fill: semi-transparent caps enabled")
         for i in range(num_sats):
+            # Resolve per-satellite coverage radius
+            if is_multi_shell and shell_coverage_radii:
+                sidx = shell_map.get(sats[i].name, 0)
+                cr_km = shell_coverage_radii.get(sidx, coverage_radius or 1000.0)
+            else:
+                cr_km = coverage_radius
             sp = all_sat_positions[i][0]
             r = np.sqrt(sp[0]**2 + sp[1]**2 + sp[2]**2)
             lat = np.degrees(np.arcsin(sp[2] / r))
             lon = np.degrees(np.arctan2(sp[1], sp[0]))
-            cx, cy, cz = _create_coverage_circle_plotly(lat, lon, coverage_radius)
+            cx, cy, cz = _create_coverage_circle_plotly(lat, lon, cr_km)
             traces.append(go.Scatter3d(
                 x=cx, y=cy, z=cz, mode='lines',
-                line=dict(width=2, color=colors[i % len(colors)]),
-                showlegend=False, hoverinfo='skip', opacity=0.5
+                line=dict(width=1 if is_multi_shell else 2, color=sat_colors[i]),
+                showlegend=False, hoverinfo='skip', opacity=0.6
             ))
+            if show_fill:
+                traces.append(_create_coverage_fill_plotly(
+                    lat, lon, cr_km,
+                    color=sat_colors[i], opacity=0.18
+                ))
 
     fig = go.Figure(data=traces)
 
     # Build animation frames
     degrees_per_minute = 360.0 / (24.0 * 60.0)
     total_rotation = degrees_per_minute * args.duration
-    num_frames = 30 if show_beams else 60
 
     print(f"🔄 Generating animation ({num_frames} frames, {total_rotation:.1f}° total)...")
 
@@ -364,8 +504,14 @@ def create_3d_orbit_plot(sats, args, inc, walker_suffix, metrics=None, tco_data=
                 y=[all_sat_positions[i][time_idx, 1]],
                 z=[all_sat_positions[i][time_idx, 2]],
                 mode='markers',
-                marker=dict(size=8, color=colors[i % len(colors)]),
-                name=f"Sat {i+1}", showlegend=True
+                marker=dict(size=5 if is_multi_shell else 8, color=sat_colors[i]),
+                name=sats[i].name if not is_multi_shell else (
+                    shell_meta[shell_map.get(sats[i].name, 0)].get('label', f'Shell {shell_map.get(sats[i].name, 0)+1}')
+                    if shell_map.get(sats[i].name, 0) not in {shell_map.get(sats[j].name, 0) for j in range(i)} else
+                    shell_meta[shell_map.get(sats[i].name, 0)].get('label', '')
+                ),
+                legendgroup=f"shell_{shell_map.get(sats[i].name, 0)}" if is_multi_shell else f"sat_{i}",
+                showlegend=False,   # legend shown in initial traces only
             ))
 
         if show_trails:
@@ -376,12 +522,17 @@ def create_3d_orbit_plot(sats, args, inc, walker_suffix, metrics=None, tco_data=
                     y=all_sat_positions[i][trail_start:time_idx+1, 1],
                     z=all_sat_positions[i][trail_start:time_idx+1, 2],
                     mode='lines',
-                    line=dict(width=2, color=colors[i % len(colors)]),
+                    line=dict(width=1, color=sat_colors[i]),
                     showlegend=False, hoverinfo='skip'
                 ))
 
-        if show_beams and coverage_radius:
+        if show_beams and (coverage_radius or is_multi_shell):
             for i in range(num_sats):
+                if is_multi_shell and shell_coverage_radii:
+                    sidx = shell_map.get(sats[i].name, 0)
+                    cr_km = shell_coverage_radii.get(sidx, 1000.0)
+                else:
+                    cr_km = coverage_radius
                 sp = all_sat_positions[i][time_idx]
                 r = np.sqrt(sp[0]**2 + sp[1]**2 + sp[2]**2)
                 lat = np.degrees(np.arcsin(sp[2] / r))
@@ -389,12 +540,17 @@ def create_3d_orbit_plot(sats, args, inc, walker_suffix, metrics=None, tco_data=
                 rlon = lon - earth_rotation
                 if rlon > 180: rlon -= 360
                 elif rlon < -180: rlon += 360
-                cx, cy, cz = _create_coverage_circle_plotly(lat, rlon, coverage_radius)
+                cx, cy, cz = _create_coverage_circle_plotly(lat, rlon, cr_km)
                 fd.append(go.Scatter3d(
                     x=cx, y=cy, z=cz, mode='lines',
-                    line=dict(width=2, color=colors[i % len(colors)]),
-                    showlegend=False, hoverinfo='skip', opacity=0.5
+                    line=dict(width=1 if is_multi_shell else 2, color=sat_colors[i]),
+                    showlegend=False, hoverinfo='skip', opacity=0.6
                 ))
+                if show_fill:
+                    fd.append(_create_coverage_fill_plotly(
+                        lat, rlon, cr_km,
+                        color=sat_colors[i], opacity=0.18
+                    ))
 
         _add_earth_to_traces(fd, x_rot, y_rot, z_rot, earth_rotation,
                              coastline_data, show_map, show_beams)
@@ -413,7 +569,11 @@ def create_3d_orbit_plot(sats, args, inc, walker_suffix, metrics=None, tco_data=
     fig.frames = frames
 
     fig.update_layout(
-        title=f"3D Orbit View | {walker_suffix}" + (" | Earth Rotation Physics" if show_map else ""),
+        title=(
+            f"Multi-Shell Constellation | {walker_suffix} | {num_sats} sats / {len(shell_meta)} shells"
+            if is_multi_shell else
+            f"3D Orbit View | {walker_suffix}" + (" | Earth Rotation Physics" if show_map else "")
+        ),
         scene=dict(
             xaxis_title='X (km)', yaxis_title='Y (km)', zaxis_title='Z (km)',
             aspectmode='data', camera=dict(eye=dict(x=1.5, y=0, z=0.5))
@@ -449,12 +609,23 @@ def create_3d_orbit_plot(sats, args, inc, walker_suffix, metrics=None, tco_data=
     fig.write_html(html_filename)
     print(f"💾 Saved interactive 3D: {html_filename}")
     print(f"   🌍 Earth rotation: {total_rotation:.1f}° over {args.duration} min")
-    print(f"   🛰️  {num_sats} satellites tracked")
+    if is_multi_shell:
+        print(f"   🌐 Multi-shell: {len(shell_meta)} shells, {num_sats} satellites rendered")
+        for sm in shell_meta:
+            cr = (shell_coverage_radii or {}).get(sm['index'])
+            cr_str = f", coverage {cr:.0f} km" if cr else ""
+            print(f"      Shell {sm['index']+1}: {sm['label']} — {sm['sats']} sats{cr_str}")
+    else:
+        print(f"   🛰️  {num_sats} satellites tracked")
     if show_trails:
         print("   ✨ Satellite trails enabled (30-minute history)")
-    if show_beams and coverage_radius:
+    if show_beams:
         min_elev = getattr(args, 'min_elev', 10.0)
-        print(f"   📡 Coverage beams: {coverage_radius:.0f} km radius @ {min_elev}°")
+        fill_note = " + filled caps" if show_fill else ""
+        if coverage_radius:
+            print(f"   📡 Coverage beams: {coverage_radius:.0f} km radius @ {min_elev}°{fill_note}")
+        else:
+            print(f"   📡 Coverage beams: per-shell @ {min_elev}°{fill_note}")
     print("   🖱️  Mouse controls: Left-drag=rotate, Right-drag=pan, Scroll=zoom")
 
     if metrics and tco_data:

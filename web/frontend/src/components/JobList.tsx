@@ -13,7 +13,7 @@ const STATUS_COLORS: Record<JobStatusValue, string> = {
 }
 
 const MODE_LABELS: Record<string, string> = {
-  heatmap: 'Heatmap', sky: 'Sky', orbit: 'Orbit', track: 'Track', route: 'Route',
+  heatmap: 'Heatmap', 'heatmap-rf': 'RF Heatmap', sky: 'Sky', orbit: 'Orbit', track: 'Track', route: 'Route',
 }
 
 // ── Sort types ────────────────────────────────────────────────────────────────
@@ -136,9 +136,9 @@ export default function JobList({
   selectedJobId: string | null
 }) {
   const qc = useQueryClient()
-  const [activeTag, setActiveTag] = useState<string | null>(null)
-  const [sortCol,   setSortCol]   = useState<SortCol>('created_at')
-  const [sortDir,   setSortDir]   = useState<SortDir>('desc')
+  const [activeTag,   setActiveTag]   = useState<string | null>(null)
+  const [sortCol,     setSortCol]     = useState<SortCol>('created_at')
+  const [sortDir,     setSortDir]     = useState<SortDir>('desc')
 
   const { data: jobs = [], isLoading } = useQuery({
     queryKey: ['jobs'],

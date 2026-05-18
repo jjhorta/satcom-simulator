@@ -72,11 +72,17 @@ export default function HeatmapViewer({ jobId, filename }: { jobId: string; file
         <FitBounds rows={data} cellDeg={cellDeg} />
 
         {data.map((row, i) => {
+          // RF heatmap CSVs (older runs) used 'rf_availability_pct'; normalise
+          const pct: number = Number(
+            (row.availability_pct as number | undefined)
+            ?? (row as Record<string, unknown>)['rf_availability_pct']
+            ?? 0
+          )
           const bounds: LatLngBoundsExpression = [
             [row.latitude  - half, row.longitude - half],
             [row.latitude  + half, row.longitude + half],
           ]
-          const colour = pctToColour(row.availability_pct)
+          const colour = pctToColour(pct)
           return (
             <Rectangle
               key={i}
@@ -92,7 +98,7 @@ export default function HeatmapViewer({ jobId, filename }: { jobId: string; file
                 <span className="font-mono text-xs">
                   {row.latitude.toFixed(1)}°, {row.longitude.toFixed(1)}°
                   <br />
-                  Coverage: <strong>{row.availability_pct.toFixed(1)}%</strong>
+                  Coverage: <strong>{pct.toFixed(1)}%</strong>
                 </span>
               </Tooltip>
             </Rectangle>

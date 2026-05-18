@@ -251,6 +251,137 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   )
 }
 
+// ── Exported content component (reused in FullReportViewer) ──────────────────
+export function TcoDashboardContent({ data }: { data: TcoData }) {
+  const mp    = data.mission_parameters
+  const capex = data.capex
+  const opex  = data.annual_opex
+  const tc    = data.total_costs
+  const con   = data.constellation
+  const orb   = data.orbital
+  const cov   = data.coverage
+  const infra = data.infrastructure
+
+  const capexSlices = [
+    { label: 'Development',       value: capex.development },
+    { label: 'Satellites',        value: capex.initial_satellites },
+    { label: 'Launches',          value: capex.initial_launches },
+    { label: 'Ground Infra',      value: capex.ground_infrastructure },
+    { label: 'Insurance',         value: capex.launch_insurance },
+  ]
+
+  const opexBars = [
+    { label: 'Sat Replacement',    value: opex.satellite_replacement, color: '#6366f1' },
+    { label: 'Repl. Launches',     value: opex.replacement_launches,  color: '#06b6d4' },
+    { label: 'Ground Ops',         value: opex.ground_operations,     color: '#f59e0b' },
+    { label: 'Staff',              value: opex.staff,                 color: '#10b981' },
+    { label: 'In-Orbit Insurance', value: opex.insurance,             color: '#f43f5e' },
+    { label: 'Decommissioning',    value: opex.decommissioning,       color: '#a78bfa' },
+  ]
+
+  return (
+    <>
+      {/* ── KPIs ─────────────────────────────────────────────────── */}
+      <section>
+        <SectionTitle>Mission at a glance</SectionTitle>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <KpiCard label="Total TCO" value={fmtM(tc.total_tco)}
+            sub={`over ${mp.mission_duration_years} years`} />
+          <KpiCard label="Initial CAPEX" value={fmtM(tc.total_capex)} />
+          <KpiCard label="Annual OPEX" value={fmtM(opex.total) + '/yr'} />
+          <KpiCard label="Cost / Sat / Year" value={`$${tc.cost_per_sat_per_year.toFixed(2)}M`} />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          <KpiCard label="Constellation" value={`${con.total_satellites} sats`}
+            sub={`${con.num_planes} planes × ${con.sats_per_plane}`} />
+          <KpiCard label="Altitude" value={`${fmt(con.altitude_km, 0)} km`}
+            sub={`${fmt(con.inclination_deg, 1)}° incl`} />
+          <KpiCard label="Orbital period" value={`${fmt(orb.period_min)} min`}
+            sub={`${fmt(orb.orbits_per_day, 1)} orbits/day`} />
+          <KpiCard label="Coverage / Sat" value={`${fmt(cov.coverage_per_sat_pct, 2)}%`}
+            sub={`avg revisit ${fmt(cov.avg_revisit_time_min)} min`} />
+        </div>
+      </section>
+
+      {/* ── CAPEX breakdown ──────────────────────────────────────── */}
+      <section>
+        <SectionTitle>Initial Investment — CAPEX breakdown</SectionTitle>
+        <div className="flex gap-6 items-start">
+          <DonutChart slices={capexSlices} />
+          <div className="flex-1 space-y-3">
+            <Legend items={capexSlices.map((s, i) => ({ ...s, color: DONUT_COLORS[i] }))} />
+            <div className="pt-2 border-t border-gray-800 flex justify-between text-xs">
+              <span className="text-gray-500">Total CAPEX</span>
+              <span className="text-white font-semibold">{fmtM(capex.total)}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── OPEX bars ────────────────────────────────────────────── */}
+      <section>
+        <SectionTitle>Annual Operating Costs — OPEX</SectionTitle>
+        <BarChart items={opexBars} />
+        <div className="mt-3 flex justify-between text-xs border-t border-gray-800 pt-2">
+          <span className="text-gray-500">Total Annual OPEX</span>
+          <span className="text-white font-semibold">{fmtM(opex.total)}/yr</span>
+        </div>
+      </section>
+
+      {/* ── Cumulative cost line ─────────────────────────────────── */}
+      <section>
+        <SectionTitle>Cumulative Cost over Mission Life</SectionTitle>
+        <CumulativeCostChart
+          capex={tc.total_capex}
+          annualOpex={opex.total}
+          years={mp.mission_duration_years}
+        />
+        <div className="flex justify-between text-xs mt-1">
+          <span className="text-gray-500">CAPEX: {fmtM(tc.total_capex)}</span>
+          <span className="text-gray-500">
+            OPEX {mp.mission_duration_years}yr: {fmtM(tc.total_opex)}
+          </span>
+          <span className="text-indigo-400 font-semibold">TCO: {fmtM(tc.total_tco)}</span>
+        </div>
+      </section>
+
+      {/* ── Infrastructure & Launch ──────────────────────────────── */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div>
+          <SectionTitle>Infrastructure</SectionTitle>
+          <div className="space-y-2 text-sm text-gray-400">
+            <div className="flex justify-between"><span>Platform</span><span className="text-gray-200">{mp.platform_description}</span></div>
+            <div className="flex justify-between"><span>Satellite mass</span><span className="text-gray-200">{fmt(mp.satellite_mass_kg, 0)} kg</span></div>
+            <div className="flex justify-between"><span>Ground stations</span><span className="text-gray-200">{infra.ground_stations}</span></div>
+            <div className="flex justify-between"><span>Engineering staff</span><span className="text-gray-200">{infra.engineers} people</span></div>
+            <div className="flex justify-between"><span>Satellite lifetime</span><span className="text-gray-200">{fmt(mp.satellite_lifetime_years)} years</span></div>
+            <div className="flex justify-between"><span>Replacement rate</span><span className="text-gray-200">{fmt(mp.replacement_rate_per_year)} sats/yr</span></div>
+          </div>
+        </div>
+        <div>
+          <SectionTitle>Launch configuration</SectionTitle>
+          <div className="space-y-2 text-sm text-gray-400">
+            <div className="flex justify-between">
+              <span>Launch vehicle</span>
+              <span className="text-gray-200 text-right max-w-[180px]">
+                {data.launch_config.launch_vehicle_description}
+              </span>
+            </div>
+            <div className="flex justify-between"><span>Batch size</span><span className="text-gray-200">{data.launch_config.batch_size} sats</span></div>
+            <div className="flex justify-between"><span>Initial launches</span><span className="text-gray-200">{data.launch_config.initial_launches}</span></div>
+            <div className="flex justify-between">
+              <span>Steady-state</span>
+              <span className="text-gray-200">{data.launch_config.annual_replacement_launches} launches/yr</span>
+            </div>
+            <div className="flex justify-between"><span>Coverage radius/sat</span><span className="text-gray-200">{fmt(cov.radius_km, 0)} km</span></div>
+            <div className="flex justify-between"><span>Max gap time</span><span className="text-gray-200">{fmt(cov.max_gap_time_min)} min</span></div>
+          </div>
+        </div>
+      </section>
+    </>
+  )
+}
+
 // ── Main modal ────────────────────────────────────────────────────────────────
 export default function TcoDashboardModal({ jobId, onClose }: { jobId: string; onClose: () => void }) {
   const { data, isLoading, isError } = useQuery<TcoData>({
@@ -288,170 +419,7 @@ export default function TcoDashboardModal({ jobId, onClose }: { jobId: string; o
               No TCO data available. Re-run the orbit simulation to generate it.
             </p>
           )}
-
-          {data && (() => {
-            const mp   = data.mission_parameters
-            const capex = data.capex
-            const opex  = data.annual_opex
-            const tc    = data.total_costs
-            const con   = data.constellation
-            const orb   = data.orbital
-            const cov   = data.coverage
-            const infra = data.infrastructure
-
-            const capexSlices = [
-              { label: 'Development',       value: capex.development },
-              { label: 'Satellites',        value: capex.initial_satellites },
-              { label: 'Launches',          value: capex.initial_launches },
-              { label: 'Ground Infra',      value: capex.ground_infrastructure },
-              { label: 'Insurance',         value: capex.launch_insurance },
-            ]
-
-            const opexBars = [
-              { label: 'Sat Replacement',   value: opex.satellite_replacement, color: '#6366f1' },
-              { label: 'Repl. Launches',    value: opex.replacement_launches,  color: '#06b6d4' },
-              { label: 'Ground Ops',        value: opex.ground_operations,     color: '#f59e0b' },
-              { label: 'Staff',             value: opex.staff,                 color: '#10b981' },
-              { label: 'In-Orbit Insurance',value: opex.insurance,             color: '#f43f5e' },
-              { label: 'Decommissioning',   value: opex.decommissioning,       color: '#a78bfa' },
-            ]
-
-            return (
-              <>
-                {/* ── KPIs ─────────────────────────────────────────────────── */}
-                <section>
-                  <SectionTitle>Mission at a glance</SectionTitle>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <KpiCard label="Total TCO" value={fmtM(tc.total_tco)}
-                      sub={`over ${mp.mission_duration_years} years`} />
-                    <KpiCard label="Initial CAPEX" value={fmtM(tc.total_capex)} />
-                    <KpiCard label="Annual OPEX" value={fmtM(opex.total) + '/yr'} />
-                    <KpiCard label="Cost / Sat / Year" value={`$${tc.cost_per_sat_per_year.toFixed(2)}M`} />
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-                    <KpiCard label="Constellation" value={`${con.total_satellites} sats`}
-                      sub={`${con.num_planes} planes × ${con.sats_per_plane}`} />
-                    <KpiCard label="Altitude" value={`${fmt(con.altitude_km, 0)} km`}
-                      sub={`${fmt(con.inclination_deg, 1)}° incl`} />
-                    <KpiCard label="Orbital period" value={`${fmt(orb.period_min)} min`}
-                      sub={`${fmt(orb.orbits_per_day, 1)} orbits/day`} />
-                    <KpiCard label="Coverage / Sat" value={`${fmt(cov.coverage_per_sat_pct, 2)}%`}
-                      sub={`avg revisit ${fmt(cov.avg_revisit_time_min)} min`} />
-                  </div>
-                </section>
-
-                {/* ── CAPEX breakdown ──────────────────────────────────────── */}
-                <section>
-                  <SectionTitle>Initial Investment — CAPEX breakdown</SectionTitle>
-                  <div className="flex gap-6 items-start">
-                    <DonutChart slices={capexSlices} />
-                    <div className="flex-1 space-y-3">
-                      <Legend items={capexSlices.map((s, i) => ({ ...s, color: DONUT_COLORS[i] }))} />
-                      <div className="pt-2 border-t border-gray-800 flex justify-between text-xs">
-                        <span className="text-gray-500">Total CAPEX</span>
-                        <span className="text-white font-semibold">{fmtM(capex.total)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                {/* ── OPEX bars ────────────────────────────────────────────── */}
-                <section>
-                  <SectionTitle>Annual Operating Costs — OPEX</SectionTitle>
-                  <BarChart items={opexBars} />
-                  <div className="mt-3 flex justify-between text-xs border-t border-gray-800 pt-2">
-                    <span className="text-gray-500">Total Annual OPEX</span>
-                    <span className="text-white font-semibold">{fmtM(opex.total)}/yr</span>
-                  </div>
-                </section>
-
-                {/* ── Cumulative cost line ─────────────────────────────────── */}
-                <section>
-                  <SectionTitle>Cumulative Cost over Mission Life</SectionTitle>
-                  <CumulativeCostChart
-                    capex={tc.total_capex}
-                    annualOpex={opex.total}
-                    years={mp.mission_duration_years}
-                  />
-                  <div className="flex justify-between text-xs mt-1">
-                    <span className="text-gray-500">CAPEX: {fmtM(tc.total_capex)}</span>
-                    <span className="text-gray-500">
-                      OPEX {mp.mission_duration_years}yr: {fmtM(tc.total_opex)}
-                    </span>
-                    <span className="text-indigo-400 font-semibold">
-                      TCO: {fmtM(tc.total_tco)}
-                    </span>
-                  </div>
-                </section>
-
-                {/* ── Infrastructure & Launch ──────────────────────────────── */}
-                <section className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div>
-                    <SectionTitle>Infrastructure</SectionTitle>
-                    <div className="space-y-2 text-sm text-gray-400">
-                      <div className="flex justify-between">
-                        <span>Platform</span>
-                        <span className="text-gray-200">{mp.platform_description}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Satellite mass</span>
-                        <span className="text-gray-200">{fmt(mp.satellite_mass_kg, 0)} kg</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Ground stations</span>
-                        <span className="text-gray-200">{infra.ground_stations}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Engineering staff</span>
-                        <span className="text-gray-200">{infra.engineers} people</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Satellite lifetime</span>
-                        <span className="text-gray-200">{fmt(mp.satellite_lifetime_years)} years</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Replacement rate</span>
-                        <span className="text-gray-200">{fmt(mp.replacement_rate_per_year)} sats/yr</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <SectionTitle>Launch configuration</SectionTitle>
-                    <div className="space-y-2 text-sm text-gray-400">
-                      <div className="flex justify-between">
-                        <span>Launch vehicle</span>
-                        <span className="text-gray-200 text-right max-w-[180px]">
-                          {data.launch_config.launch_vehicle_description}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Batch size</span>
-                        <span className="text-gray-200">{data.launch_config.batch_size} sats</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Initial launches</span>
-                        <span className="text-gray-200">{data.launch_config.initial_launches}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Steady-state</span>
-                        <span className="text-gray-200">
-                          {data.launch_config.annual_replacement_launches} launches/yr
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Coverage radius/sat</span>
-                        <span className="text-gray-200">{fmt(cov.radius_km, 0)} km</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Max gap time</span>
-                        <span className="text-gray-200">{fmt(cov.max_gap_time_min)} min</span>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-              </>
-            )
-          })()}
+          {data && <TcoDashboardContent data={data} />}
         </div>
       </div>
     </div>

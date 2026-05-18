@@ -13,17 +13,40 @@ from skyfield.api import EarthSatellite, load, wgs84
 
 from .. import backends
 from ..physics import calculate_sso_inclination
-from ..constellation import generate_walker_delta_tles, calculate_coverage_footprint, calculate_constellation_metrics
-from ..tco import calculate_tco, print_constellation_dashboard, print_tco_analysis, save_tco_json
-from ..constants import VISUALIZATION_SETTINGS
+from ..constellation import (
+    generate_walker_delta_tles, calculate_coverage_footprint,
+    calculate_constellation_metrics,
+    generate_multi_shell_tles, aggregate_constellation_metrics,
+)
+from ..tco import calculate_tco, print_constellation_dashboard, print_tco_analysis, save_tco_json, print_multi_shell_dashboard
+from ..constants import VISUALIZATION_SETTINGS, KNOWN_CONSTELLATIONS
 from ..plots.orbit import draw_continents_on_sphere, draw_coverage_circle_on_sphere, create_3d_orbit_plot
 
 
 def view_orbit(args):
     """3D orbital visualization with animation"""
+    import json as _json
+
     ts = load.timescale()
     t0 = ts.utc(2024, 1, 1, 12, 0, 0)
 
+    # ── Multi-shell path ────────────────────────────────────────────────────
+    shells_cfg = None
+    if getattr(args, 'constellation', None):
+        shells_cfg = KNOWN_CONSTELLATIONS[args.constellation]
+        print(f"🌐 Multi-shell preset: '{args.constellation}' ({len(shells_cfg)} shells)")
+    elif getattr(args, 'shells', None):
+        try:
+            shells_cfg = _json.loads(args.shells)
+        except Exception as e:
+            print(f"❌ --shells JSON parse error: {e}")
+            return
+
+    if shells_cfg is not None:
+        _view_orbit_multi_shell(args, ts, t0, shells_cfg)
+        return
+
+    # ── Single-shell path (original behaviour) ──────────────────────────────
     if args.sso:
         inc = calculate_sso_inclination(args.altitude)
         print(f"🛰️  SSO Mode: Using inclination {inc:.2f}°")
@@ -59,6 +82,20 @@ def view_orbit(args):
     save_tco_json(tco_data, metrics, filename=f"tco_{walker_suffix}")
 
     tles = generate_walker_delta_tles(args.sats, args.planes, inc, args.altitude, args.phasing)
+
+    # Save TLEs as JSON so the web UI can propagate them client-side
+    import json
+    tle_payload = {
+        "inclination": inc,
+        "altitude_km": args.altitude,
+        "num_sats": args.sats,
+        "num_planes": args.planes,
+        "epoch": "2024-01-01T12:00:00Z",
+        "tles": [{"name": name, "line1": l1, "line2": l2} for name, l1, l2 in tles],
+    }
+    with open(f"tles_{walker_suffix}.json", "w") as f:
+        json.dump(tle_payload, f, indent=2)
+
     sats = [EarthSatellite(line1, line2, name, ts) for name, line1, line2 in tles]
 
     if backends.GRAPHICS_BACKEND == 'plotly':
@@ -246,3 +283,132 @@ def view_orbit(args):
             plt.close()
         else:
             plt.show()
+
+
+# ---------------------------------------------------------------------------
+# Multi-shell orbit view
+# ---------------------------------------------------------------------------
+
+def _view_orbit_multi_shell(args, ts, t0, shells_cfg):
+    """Handle multi-shell constellation visualisation (plotly only)."""
+    import json as _json
+
+    min_elev = getattr(args, 'min_elev', 10.0)
+
+    # Normalise shell dicts: support both 'inc' and 'inclination', 'alt' and 'altitude_km'
+    normalised = []
+    for sh in shells_cfg:
+        normalised.append({
+            'sats':        sh.get('sats', sh.get('num_sats', 12)),
+            'planes':      sh.get('planes', sh.get('num_planes', 3)),
+            'inclination': sh.get('inclination', sh.get('inc', 87.0)),
+            'altitude_km': sh.get('altitude_km', sh.get('alt', sh.get('altitude', 600.0))),
+            'phasing':     sh.get('phasing', 1),
+            'name':        sh.get('name'),
+        })
+
+    tles, shell_map, shell_meta = generate_multi_shell_tles(normalised)
+    agg = aggregate_constellation_metrics(normalised, min_elev)
+
+    total_sats = agg['combined']['total_satellites']
+    num_shells = agg['combined']['num_shells']
+
+    # Walker suffix for filenames (must be defined before any use)
+    constellation_name = (
+        getattr(args, 'constellation_name', None)
+        or getattr(args, 'constellation', None)
+        or 'custom'
+    )
+    walker_suffix = f"multi_{constellation_name}_{total_sats}sats"
+
+    print(f"🌐 Multi-shell constellation: {total_sats} satellites across {num_shells} shells")
+    for m in shell_meta:
+        print(f"   Shell {m['index']+1}: {m['label']} — {m['sats']} sats in {m['planes']} planes @ {m['altitude_km']} km")
+
+    print_multi_shell_dashboard(normalised, agg, filename=f"dashboard_{walker_suffix}")
+
+    # ── TCO for Business Plan ───────────────────────────────────────────────
+    # Use the largest shell as the representative for orbital/coverage metrics,
+    # then override constellation totals with the aggregate.
+    platform_type = getattr(args, 'platform', 'smallsat')
+    payload_type  = getattr(args, 'comms', 'ais')
+    rep_idx = max(range(len(normalised)), key=lambda i: normalised[i]['sats'])
+    rep_metrics = agg['per_shell'][rep_idx]
+    combined = agg['combined']
+    try:
+        tco_data = calculate_tco(
+            num_sats=total_sats,
+            platform_type=platform_type,
+            payload_type=payload_type,
+            satellite_lifetime_years=rep_metrics['lifetime']['satellite_lifetime_years'],
+            replacement_rate_per_year=rep_metrics['lifetime']['replacement_rate_per_year'],
+            mission_duration_years=15,
+            num_planes=sum(sh['planes'] for sh in normalised),
+            deployment_mode='basic',
+        )
+        # Build a metrics dict compatible with save_tco_json
+        combined_metrics = {
+            'orbital': rep_metrics['orbital'],
+            'coverage': {
+                'min_elevation_deg':    rep_metrics['coverage']['min_elevation_deg'],
+                'radius_km':            rep_metrics['coverage']['radius_km'],
+                'area_km2':             rep_metrics['coverage']['area_km2'],
+                'coverage_per_sat_pct': combined['approx_combined_coverage_pct'] / total_sats,
+                'avg_revisit_time_min': combined['best_shell_revisit_min'],
+                'max_gap_time_min':     combined['best_shell_revisit_min'],
+            },
+            'constellation': {
+                'total_satellites': total_sats,
+                'num_planes':  sum(sh['planes'] for sh in normalised),
+                'sats_per_plane': total_sats // max(sum(sh['planes'] for sh in normalised), 1),
+                'altitude_km': rep_metrics['constellation']['altitude_km'],
+                'inclination_deg': rep_metrics['constellation']['inclination_deg'],
+            },
+            'lifetime': rep_metrics['lifetime'],
+        }
+        save_tco_json(tco_data, combined_metrics, filename=f"tco_{walker_suffix}")
+        print_tco_analysis(tco_data, filename=f"tco_{walker_suffix}")
+    except Exception as _tco_err:
+        print(f"⚠️  TCO calculation skipped: {_tco_err}")
+
+    # Build coverage radius per shell
+    shell_coverage_radii = {
+        m['index']: calculate_coverage_footprint(m['altitude_km'], min_elev)
+        for m in shell_meta
+    }
+
+    # Save TLEs
+    tle_payload = {
+        "type": "multi_shell",
+        "constellation": constellation_name,
+        "total_satellites": total_sats,
+        "shells": shell_meta,
+        "epoch": "2024-01-01T12:00:00Z",
+        "tles": [{"name": name, "line1": l1, "line2": l2} for name, l1, l2 in tles],
+    }
+    tle_file = f"tles_{walker_suffix}.json"
+    with open(tle_file, "w") as f:
+        _json.dump(tle_payload, f, indent=2)
+    print(f"💾 TLEs saved: {tle_file}")
+
+    sats_obj = [EarthSatellite(line1, line2, name, ts) for name, line1, line2 in tles]
+
+    if backends.GRAPHICS_BACKEND == 'plotly':
+        create_3d_orbit_plot(
+            sats_obj, args,
+            inc=None,           # not used in multi-shell mode
+            walker_suffix=walker_suffix,
+            metrics=None,
+            tco_data=None,
+            shell_map=shell_map,
+            shell_meta=shell_meta,
+            shell_coverage_radii=shell_coverage_radii,
+        )
+    else:
+        print("⚠️  Multi-shell visualisation only supported with --backend plotly.")
+        print(f"   Re-run with: --backend plotly")
+        print(f"\n📊 Combined metrics:")
+        print(f"   Total satellites : {total_sats}")
+        print(f"   Shells           : {num_shells}")
+        print(f"   Approx coverage  : {agg['combined']['approx_combined_coverage_pct']:.1f}%")
+        print(f"   Best revisit     : {agg['combined']['best_shell_revisit_min']:.1f} min")

@@ -6,6 +6,8 @@ from .api.auth_routes import router as auth_router
 from .api.jobs_routes import router as jobs_router
 from .api.options_routes import router as options_router
 from .api.settings_routes import router as settings_router
+from .api.ai_routes import router as ai_router
+from .api.reports_routes import router as reports_router
 
 settings = get_settings()
 
@@ -30,6 +32,8 @@ app.include_router(auth_router)
 app.include_router(jobs_router)
 app.include_router(options_router)
 app.include_router(settings_router)
+app.include_router(ai_router)
+app.include_router(reports_router)
 
 
 @app.get("/api/health")

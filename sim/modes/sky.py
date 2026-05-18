@@ -11,13 +11,14 @@ from datetime import timedelta
 from skyfield.api import EarthSatellite, load, wgs84
 
 from ..physics import calculate_sso_inclination, calculate_generic_link
-from ..constellation import generate_walker_delta_tles
+from ..constellation import generate_walker_delta_tles, generate_multi_shell_tles
 from ..constants import (COMMS_PAYLOADS, LOCATIONS, SEA_ROUTES, ARCTIC_ROUTES,
-                          VISUALIZATION_SETTINGS)
+                          VISUALIZATION_SETTINGS, KNOWN_CONSTELLATIONS)
 
 
 def view_sky(args):
     """Observer-centric sky view with animated dashboard"""
+    import json as _json
     ts = load.timescale()
     t0 = ts.utc(2024, 1, 1, 12, 0, 0)
 
@@ -33,13 +34,46 @@ def view_sky(args):
 
     observer = wgs84.latlon(lat, lon)
 
-    if args.sso:
-        inc = calculate_sso_inclination(args.altitude)
-        print(f"🛰️  SSO Mode: Using inclination {inc:.2f}°")
-    else:
-        inc = args.inclination
+    # ── Multi-shell path ────────────────────────────────────────────────────
+    shells_cfg = None
+    if getattr(args, 'constellation', None):
+        shells_cfg = KNOWN_CONSTELLATIONS[args.constellation]
+    elif getattr(args, 'shells', None):
+        try:
+            shells_cfg = _json.loads(args.shells)
+        except Exception as e:
+            print(f"❌ --shells JSON parse error: {e}")
+            return
 
-    tles = generate_walker_delta_tles(args.sats, args.planes, inc, args.altitude, args.phasing)
+    if shells_cfg is not None:
+        normalised = []
+        for sh in shells_cfg:
+            normalised.append({
+                'sats':        sh.get('sats', sh.get('num_sats', 12)),
+                'planes':      sh.get('planes', sh.get('num_planes', 3)),
+                'inclination': sh.get('inclination', sh.get('inc', 87.0)),
+                'altitude_km': sh.get('altitude_km', sh.get('alt', sh.get('altitude', 600.0))),
+                'phasing':     sh.get('phasing', 1),
+            })
+        tles_multi, _shell_map, _shell_meta = generate_multi_shell_tles(normalised)
+        max_sats = getattr(args, 'max_sats', 250)
+        tles_multi = tles_multi[:max_sats]
+        tles = tles_multi
+        total_sats = sum(sh['sats'] for sh in normalised)
+        constellation_name = (
+            getattr(args, 'constellation_name', None)
+            or getattr(args, 'constellation', None)
+            or 'custom'
+        )
+        print(f"🌐 Multi-shell sky view: {len(tles)} of {total_sats} sats ({constellation_name})")
+    else:
+        if args.sso:
+            inc = calculate_sso_inclination(args.altitude)
+            print(f"🛰️  SSO Mode: Using inclination {inc:.2f}°")
+        else:
+            inc = args.inclination
+        tles = generate_walker_delta_tles(args.sats, args.planes, inc, args.altitude, args.phasing)
+
     sats = [EarthSatellite(line1, line2, name, ts) for name, line1, line2 in tles]
 
     p = COMMS_PAYLOADS[args.comms]

@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ConstellaSim — Satellite Constellation Simulator</title>
+  <meta name="description" content="Physics-based satellite constellation simulator with AI insights, RF link budget analysis, and 15-year TCO modelling. Built for maritime, defense, and IoT missions." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #030712;
+      --bg-card:     rgba(15, 23, 42, 0.75);
+      --primary:     #0ea5e9;
+      --primary-dk:  #0284c7;
+      --accent:      #22d3ee;
+      --purple:      #6366f1;
+      --green:       #10b981;
+      --text:        #f1f5f9;
+      --muted:       #94a3b8;
+      --border:      rgba(148, 163, 184, 0.1);
+      --glow:        rgba(14, 165, 233, 0.3);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif; }
+
+    /* ── STARFIELD ── */
+    #starfield {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      padding: 0.875rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(3, 7, 18, 0.82);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .logo-mark {
+      width: 34px; height: 34px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--purple) 100%);
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      flex-shrink: 0;
+      box-shadow: 0 0 16px rgba(14, 165, 233, 0.4);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+
+    .btn-login {
+      padding: 0.5rem 1.375rem;
+      background: transparent;
+      border: 1px solid var(--primary);
+      color: var(--primary);
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.22s;
+      white-space: nowrap;
+    }
+    .btn-login:hover {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 0 22px var(--glow);
+    }
+
+    /* ── LAYOUT ── */
+    section { position: relative; z-index: 1; }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+
+    /* ── GRADIENT TEXT ── */
+    .gradient-text {
+      background: linear-gradient(135deg, var(--primary), var(--accent) 50%, var(--purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* ── BADGE ── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.375rem 0.9rem;
+      background: rgba(14, 165, 233, 0.1);
+      border: 1px solid rgba(14, 165, 233, 0.3);
+      border-radius: 100px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+
+    /* ── SECTION HEADER ── */
+    .section-header { text-align: center; margin-bottom: 3rem; }
+    .section-tag {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.75rem;
+    }
+    .section-title {
+      font-size: clamp(1.75rem, 3vw, 2.5rem);
+      font-weight: 700;
+      line-height: 1.15;
+      margin-bottom: 1rem;
+    }
+    .section-desc {
+      color: var(--muted);
+      font-size: 1rem;
+      max-width: 540px;
+      margin: 0 auto;
+      line-height: 1.7;
+    }
+
+    /* ── BUTTONS ── */
+    .btn-primary {
+      padding: 0.875rem 2rem;
+      background: linear-gradient(135deg, var(--primary), var(--purple));
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.22s;
+      box-shadow: 0 0 30px rgba(14, 165, 233, 0.35);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 50px rgba(14, 165, 233, 0.55);
+    }
+    .btn-secondary {
+      padding: 0.875rem 2rem;
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.22s;
+      backdrop-filter: blur(4px);
+    }
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.09);
+      border-color: rgba(148, 163, 184, 0.35);
+    }
+
+    /* ── HERO ── */
+    #hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      padding: 7rem 0 4rem;
+    }
+    .hero-inner {
+      text-align: center;
+      max-width: 820px;
+      margin: 0 auto;
+    }
+    .hero-badge { margin-bottom: 1.75rem; }
+    .hero-title {
+      font-size: clamp(2.4rem, 6vw, 4.5rem);
+      font-weight: 700;
+      line-height: 1.08;
+      margin-bottom: 1.5rem;
+      letter-spacing: -0.02em;
+    }
+    .hero-sub {
+      font-size: 1.125rem;
+      color: var(--muted);
+      line-height: 1.75;
+      margin-bottom: 2.5rem;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .hero-btns {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 4rem;
+    }
+    .hero-stats {
+      display: flex;
+      justify-content: center;
+      gap: 3rem;
+      flex-wrap: wrap;
+      padding-top: 2.5rem;
+      border-top: 1px solid var(--border);
+    }
+    .stat-val {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--primary);
+    }
+    .stat-lbl {
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-top: 0.2rem;
+    }
+
+    /* ── FEATURES ── */
+    #features { padding: 6rem 0; }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+    }
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.75rem;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--primary), var(--purple));
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .feature-card:hover {
+      border-color: rgba(14, 165, 233, 0.35);
+      transform: translateY(-4px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 30px rgba(14,165,233,0.08);
+    }
+    .feature-card:hover::before { opacity: 1; }
+    .feature-icon {
+      width: 48px; height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .ic-blue   { background: rgba(14,165,233,0.15); }
+    .ic-purple { background: rgba(99,102,241,0.15); }
+    .ic-cyan   { background: rgba(34,211,238,0.15); }
+    .ic-green  { background: rgba(16,185,129,0.15); }
+    .ic-orange { background: rgba(249,115,22,0.15); }
+    .ic-pink   { background: rgba(236,72,153,0.15); }
+    .feature-title { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .feature-desc  { font-size: 0.875rem; color: var(--muted); line-height: 1.65; }
+
+    /* ── USE CASES ── */
+    #use-cases {
+      padding: 6rem 0;
+      background: rgba(15, 23, 42, 0.45);
+    }
+    .cases-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+    .case-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2rem;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .case-card:hover {
+      border-color: rgba(34,211,238,0.3);
+      box-shadow: 0 10px 40px rgba(34,211,238,0.05);
+    }
+    .case-tag {
+      display: inline-block;
+      padding: 0.25rem 0.625rem;
+      border-radius: 6px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 1rem;
+    }
+    .tag-maritime { background: rgba(14,165,233,0.15); color: var(--primary); }
+    .tag-defense  { background: rgba(99,102,241,0.15); color: #818cf8; }
+    .tag-iot      { background: rgba(16,185,129,0.15); color: #34d399; }
+    .case-title   { font-size: 1.15rem; font-weight: 600; margin-bottom: 0.75rem; }
+    .case-desc    { font-size: 0.875rem; color: var(--muted); line-height: 1.65; margin-bottom: 1.25rem; }
+    .case-metrics { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    .metric {
+      display: flex; align-items: center; gap: 0.375rem;
+      font-size: 0.78rem; color: var(--muted);
+    }
+    .metric-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+
+    /* ── CONSTELLATIONS ── */
+    #constellations { padding: 6rem 0; }
+    .constellation-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 1rem;
+    }
+    .constellation-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1rem;
+      text-align: center;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.3s, transform 0.3s;
+    }
+    .constellation-card:hover {
+      border-color: rgba(14,165,233,0.35);
+      transform: translateY(-3px);
+    }
+    .constellation-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+    .constellation-name { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.3rem; }
+    .constellation-detail { font-size: 0.73rem; color: var(--muted); }
+
+    /* ── TCO ── */
+    #tco {
+      padding: 6rem 0;
+      background: rgba(15, 23, 42, 0.45);
+    }
+    .tco-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+      align-items: center;
+    }
+    .tco-text h2 {
+      font-size: clamp(1.75rem, 3vw, 2.5rem);
+      font-weight: 700;
+      line-height: 1.15;
+      margin: 0.5rem 0 1rem;
+    }
+    .tco-text p { color: var(--muted); line-height: 1.7; margin-bottom: 1.5rem; font-size: 0.95rem; }
+    .tco-list { list-style: none; display: flex; flex-direction: column; gap: 0.75rem; }
+    .tco-list li { display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.875rem; color: var(--muted); }
+    .tco-check { color: var(--accent); flex-shrink: 0; margin-top: 1px; }
+
+    .tco-preview {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 1.75rem;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    .tco-chart-title {
+      font-size: 0.75rem; font-weight: 600;
+      color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.07em; margin-bottom: 1.25rem;
+    }
+    .bar-chart { display: flex; flex-direction: column; gap: 0.875rem; }
+    .bar-row { display: flex; align-items: center; gap: 0.75rem; }
+    .bar-lbl { font-size: 0.78rem; color: var(--muted); width: 76px; flex-shrink: 0; }
+    .bar-track {
+      flex: 1; height: 8px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 4px; overflow: hidden;
+    }
+    .bar-fill { height: 100%; border-radius: 4px; }
+    .bar-val { font-size: 0.78rem; font-weight: 600; color: var(--text); width: 50px; text-align: right; flex-shrink: 0; }
+    .tco-note {
+      margin-top: 1.25rem; padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.72rem; color: var(--muted); line-height: 1.5;
+    }
+
+    /* ── PRICING ── */
+    #pricing { padding: 6rem 0; }
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(275px, 1fr));
+      gap: 1.5rem;
+      max-width: 980px;
+      margin: 0 auto;
+    }
+    .pricing-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2rem;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      position: relative;
+      transition: transform 0.3s, box-shadow 0.3s;
+    }
+    .pricing-card.featured {
+      border-color: rgba(14,165,233,0.4);
+      background: rgba(14,165,233,0.04);
+      box-shadow: 0 0 60px rgba(14,165,233,0.09);
+    }
+    .pricing-card:hover { transform: translateY(-3px); }
+    .pricing-ribbon {
+      position: absolute;
+      top: -13px; left: 50%; transform: translateX(-50%);
+      padding: 0.25rem 0.9rem;
+      background: linear-gradient(135deg, var(--primary), var(--purple));
+      border-radius: 100px;
+      font-size: 0.68rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.07em;
+      white-space: nowrap;
+    }
+    .plan-name  { font-size: 0.875rem; font-weight: 600; color: var(--muted); margin-bottom: 0.4rem; }
+    .plan-price {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 2.4rem; font-weight: 700;
+      margin-bottom: 0.2rem;
+    }
+    .plan-price sub { font-size: 1rem; font-weight: 400; color: var(--muted); vertical-align: baseline; }
+    .plan-desc {
+      font-size: 0.85rem; color: var(--muted);
+      margin-bottom: 1.5rem; padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+      line-height: 1.55;
+    }
+    .plan-features { list-style: none; display: flex; flex-direction: column; gap: 0.625rem; margin-bottom: 2rem; }
+    .plan-features li { display: flex; align-items: flex-start; gap: 0.625rem; font-size: 0.85rem; color: var(--muted); }
+    .plan-features .ck { color: var(--accent); flex-shrink: 0; }
+    .plan-cta {
+      display: block; width: 100%; padding: 0.75rem;
+      border-radius: 10px; font-size: 0.875rem; font-weight: 600;
+      cursor: pointer; text-decoration: none; text-align: center;
+      transition: all 0.22s; font-family: 'Inter', sans-serif;
+    }
+    .cta-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .cta-ghost:hover { border-color: var(--primary); color: var(--primary); }
+    .cta-solid {
+      background: linear-gradient(135deg, var(--primary), var(--purple));
+      border: none; color: #fff;
+      box-shadow: 0 0 20px rgba(14,165,233,0.3);
+    }
+    .cta-solid:hover { transform: translateY(-1px); box-shadow: 0 0 40px rgba(14,165,233,0.5); }
+
+    /* ── FINAL CTA ── */
+    #cta { padding: 7rem 0; }
+    .cta-box {
+      background: linear-gradient(135deg, rgba(14,165,233,0.07), rgba(99,102,241,0.07));
+      border: 1px solid rgba(14,165,233,0.2);
+      border-radius: 24px;
+      padding: 5rem 2rem;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .cta-box::before {
+      content: '';
+      position: absolute;
+      top: -120px; left: 50%; transform: translateX(-50%);
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(14,165,233,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .cta-title { font-size: clamp(1.75rem, 3.5vw, 3rem); font-weight: 700; margin-bottom: 1rem; }
+    .cta-desc  { color: var(--muted); margin-bottom: 2rem; max-width: 480px; margin-left: auto; margin-right: auto; line-height: 1.7; }
+    .cta-btns  { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+
+    /* ── FOOTER ── */
+    footer {
+      padding: 2.5rem 0;
+      border-top: 1px solid var(--border);
+    }
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .footer-copy { font-size: 0.83rem; color: var(--muted); }
+    .footer-links { display: flex; gap: 1.5rem; }
+    .footer-links a {
+      font-size: 0.83rem; color: var(--muted);
+      text-decoration: none; transition: color 0.2s;
+    }
+    .footer-links a:hover { color: var(--text); }
+
+    /* ── SCROLL REVEAL ── */
+    .reveal {
+      opacity: 0;
+      transform: translateY(28px);
+      transition: opacity 0.65s ease, transform 0.65s ease;
+    }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 800px) {
+      .nav-links { display: none; }
+      .tco-grid  { grid-template-columns: 1fr; gap: 2.5rem; }
+      nav { padding: 0.875rem 1rem; }
+      .container { padding: 0 1rem; }
+    }
+    @media (max-width: 480px) {
+      .hero-stats { gap: 1.5rem; }
+      .btn-primary, .btn-secondary { padding: 0.75rem 1.5rem; font-size: 0.9rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ────────────────── STARFIELD CANVAS ────────────────── -->
+<canvas id="starfield" aria-hidden="true"></canvas>
+
+<!-- ────────────────── NAVIGATION ────────────────── -->
+<nav role="navigation" aria-label="Main navigation">
+  <a href="#" class="logo" aria-label="ConstellaSim home">
+    <div class="logo-mark" aria-hidden="true">🛰️</div>
+    ConstellaSim
+  </a>
+
+  <ul class="nav-links" role="list">
+    <li><a href="#features">Features</a></li>
+    <li><a href="#use-cases">Use Cases</a></li>
+    <li><a href="#constellations">Benchmarks</a></li>
+    <li><a href="#pricing">Pricing</a></li>
+  </ul>
+
+  <a href="/constellation-simulator/login" class="btn-login" aria-label="Sign in to ConstellaSim">
+    Sign In →
+  </a>
+</nav>
+
+<!-- ────────────────── HERO ────────────────── -->
+<section id="hero" aria-label="Hero">
+  <div class="container">
+    <div class="hero-inner">
+      <div class="hero-badge">
+        <span class="badge">🚀 &nbsp;AI-Powered Satellite Analysis Platform</span>
+      </div>
+
+      <h1 class="hero-title">
+        Model any constellation.<br>
+        <span class="gradient-text">Predict every link.</span>
+      </h1>
+
+      <p class="hero-sub">
+        ConstellaSim is the only physics-based constellation simulator with built-in AI insights,
+        RF link budget analysis, and 15-year TCO modelling — purpose-built for maritime,
+        defense, and IoT missions.
+      </p>
+
+      <div class="hero-btns">
+        <a href="/constellation-simulator/login" class="btn-primary">Start Simulating Free</a>
+        <a href="#features" class="btn-secondary">Explore Features</a>
+      </div>
+
+      <div class="hero-stats">
+        <div class="stat">
+          <div class="stat-val">97°</div>
+          <div class="stat-lbl">Inclination Support</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val">6+</div>
+          <div class="stat-lbl">Real Constellations</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val">AIS&thinsp;/&thinsp;VDES</div>
+          <div class="stat-lbl">Protocol Simulation</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val">15&thinsp;yr</div>
+          <div class="stat-lbl">TCO Modelling</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ────────────────── FEATURES ────────────────── -->
+<section id="features" aria-label="Features">
+  <div class="container">
+    <div class="section-header reveal">
+      <span class="section-tag">Capabilities</span>
+      <h2 class="section-title">Everything you need to<br><span class="gradient-text">design a constellation</span></h2>
+      <p class="section-desc">From orbital mechanics to commercial viability — all in one platform.</p>
+    </div>
+
+    <div class="features-grid">
+      <div class="feature-card reveal">
+        <div class="feature-icon ic-blue">🛰️</div>
+        <h3 class="feature-title">Physics-Based Orbital Engine</h3>
+        <p class="feature-desc">Walker Delta/Star geometries, inclination sweep, and Keplerian propagation. Accurate coverage maps over maritime corridors, Arctic routes, and polar regions.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon ic-purple">🤖</div>
+        <h3 class="feature-title">AI-Powered Insights</h3>
+        <p class="feature-desc">Copilot-style assistant interprets simulation outputs, flags coverage gaps and link bottlenecks, and recommends constellation geometry improvements in plain language.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon ic-cyan">📡</div>
+        <h3 class="feature-title">RF Link Budget Analysis</h3>
+        <p class="feature-desc">Full AIS/VDES link budget with MCS selection, SNR thresholds, Doppler modelling, and digital-cliff detection — per orbital pass, per vessel location.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon ic-green">💰</div>
+        <h3 class="feature-title">15-Year TCO Modelling</h3>
+        <p class="feature-desc">Calibrated against real NewSpace programs. Break down CAPEX/OPEX for nanosat to microsat platforms, rideshare vs. dedicated launch, and staffing cadence.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon ic-orange">🗺️</div>
+        <h3 class="feature-title">Interactive Coverage Maps</h3>
+        <p class="feature-desc">Plotly 3D orbit views, Bokeh heatmaps, and publication-ready matplotlib figures. Export static PNG or pan/zoom HTML with a single command flag.</p>
+      </div>
+
+      <div class="feature-card reveal">
+        <div class="feature-icon ic-pink">⚡</div>
+        <h3 class="feature-title">Batch Simulation Engine</h3>
+        <p class="feature-desc">Sweep hundreds of Walker configurations overnight. Auto-generate dashboards, comparative TCO tables, and heatmap matrices for side-by-side constellation analysis.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ────────────────── USE CASES ────────────────── -->
+<section id="use-cases" aria-label="Use cases">
+  <div class="container">
+    <div class="section-header reveal">
+      <span class="section-tag">Use Cases</span>
+      <h2 class="section-title">Built for<br><span class="gradient-text">real-world missions</span></h2>
+      <p class="section-desc">Pre-configured routes, protocols, and models for the scenarios that matter most.</p>
+    </div>
+
+    <div class="cases-grid">
+      <div class="case-card reveal">
+        <span class="case-tag tag-maritime">Maritime</span>
+        <h3 class="case-title">Global AIS / VDES Ship Tracking</h3>
+        <p class="case-desc">Analyse coverage gaps over the North Atlantic, Trans-Pacific, and Arctic routes. Model AIS reception probability and VDES throughput-per-pass to validate commercial service eligibility before hardware investment.</p>
+        <div class="case-metrics">
+          <span class="metric"><span class="metric-dot"></span>7 pre-configured routes</span>
+          <span class="metric"><span class="metric-dot"></span>AIS + VDES protocols</span>
+          <span class="metric"><span class="metric-dot"></span>Coastal &amp; deep ocean</span>
+        </div>
+      </div>
+
+      <div class="case-card reveal">
+        <span class="case-tag tag-defense">Defense &amp; Intelligence</span>
+        <h3 class="case-title">RF Geolocation &amp; Dark Vessel Detection</h3>
+        <p class="case-desc">Evaluate revisit rates over contested maritime zones. Model formation-flying architectures for RF trilateration. Compare SSO vs. mid-inclination trade-offs for specific threat corridors — quantitatively.</p>
+        <div class="case-metrics">
+          <span class="metric"><span class="metric-dot"></span>Formation flying support</span>
+          <span class="metric"><span class="metric-dot"></span>SIGINT constellation models</span>
+          <span class="metric"><span class="metric-dot"></span>Revisit rate optimiser</span>
+        </div>
+      </div>
+
+      <div class="case-card reveal">
+        <span class="case-tag tag-iot">IoT / NewSpace</span>
+        <h3 class="case-title">5G NB-IoT &amp; D2D Constellation Design</h3>
+        <p class="case-desc">Evaluate NB-IoT link margins and direct-to-device connectivity. MSS D2D feasibility scoring per orbital pass, with benchmarks from Sateliot, LusoSpace, and Orbcomm OG2 programs included out of the box.</p>
+        <div class="case-metrics">
+          <span class="metric"><span class="metric-dot"></span>NB-IoT link analysis</span>
+          <span class="metric"><span class="metric-dot"></span>D2D MSS eligibility</span>
+          <span class="metric"><span class="metric-dot"></span>100+ sat scalability</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ────────────────── CONSTELLATIONS GALLERY ────────────────── -->
+<section id="constellations" aria-label="Reference constellations">
+  <div class="container">
+    <div class="section-header reveal">
+      <span class="section-tag">Benchmarks</span>
+      <h2 class="section-title">Validated against<br><span class="gradient-text">operational programs</span></h2>
+      <p class="section-desc">Real parameters from active constellations — not synthetic assumptions.</p>
+    </div>
+
+    <div class="constellation-grid">
+      <div class="constellation-card reveal">
+        <div class="constellation-icon">🌐</div>
+        <div class="constellation-name">Spire Global</div>
+        <div class="constellation-detail">100+ Lemur-2 · Mixed inclination</div>
+      </div>
+      <div class="constellation-card reveal">
+        <div class="constellation-icon">⭕</div>
+        <div class="constellation-name">Iridium NEXT</div>
+        <div class="constellation-detail">66 sats · Walker Star · ISL</div>
+      </div>
+      <div class="constellation-card reveal">
+        <div class="constellation-icon">📶</div>
+        <div class="constellation-name">Orbcomm OG2</div>
+        <div class="constellation-detail">17 sats · M2M + AIS · 52°</div>
+      </div>
+      <div class="constellation-card reveal">
+        <div class="constellation-icon">🔍</div>
+        <div class="constellation-name">HawkEye 360</div>
+        <div class="constellation-detail">30 sats · RF trilateration clusters</div>
+      </div>
+      <div class="constellation-card reveal">
+        <div class="constellation-icon">🛸</div>
+        <div class="constellation-name">LusoSpace AIS</div>
+        <div class="constellation-detail">12 sats · 8U nano · €15M TCO</div>
+      </div>
+      <div class="constellation-card reveal">
+        <div class="constellation-icon">📡</div>
+        <div class="constellation-name">Sateliot 5G</div>
+        <div class="constellation-detail">100+ sats · NB-IoT D2D · €200M</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ────────────────── TCO TEASER ────────────────── -->
+<section id="tco" aria-label="TCO modelling">
+  <div class="container">
+    <div class="tco-grid">
+      <div class="tco-text reveal">
+        <span class="section-tag">Financial Modelling</span>
+        <h2>Know your numbers<br><span class="gradient-text">before you launch</span></h2>
+        <p>ConstellaSim's built-in TCO engine models the full 15-year lifecycle of your constellation — CAPEX, OPEX, launch strategy, insurance, and decommissioning — calibrated against real programs.</p>
+        <ul class="tco-list">
+          <li><span class="tco-check">✦</span> CAPEX breakdown: development, production, launch, ground segment</li>
+          <li><span class="tco-check">✦</span> OPEX modelling: staffing, insurance, and replacement launch cadence</li>
+          <li><span class="tco-check">✦</span> Rideshare vs. dedicated launch trade-off calculator</li>
+          <li><span class="tco-check">✦</span> Nanosat to microsat platform cost comparison</li>
+          <li><span class="tco-check">✦</span> Validated against LusoSpace, Sateliot, and Orbcomm benchmarks</li>
+        </ul>
+      </div>
+
+      <div class="tco-preview reveal">
+        <div class="tco-chart-title">TCO Breakdown — Walker 87° / 12 planes / 3 sats</div>
+        <div class="bar-chart">
+          <div class="bar-row">
+            <div class="bar-lbl">CAPEX</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:68%;background:linear-gradient(90deg,#0ea5e9,#6366f1)"></div>
+            </div>
+            <div class="bar-val">$16.2M</div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-lbl">Launch</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:44%;background:linear-gradient(90deg,#22d3ee,#0ea5e9)"></div>
+            </div>
+            <div class="bar-val">$8.4M</div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-lbl">OPEX / yr</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:28%;background:linear-gradient(90deg,#6366f1,#ec4899)"></div>
+            </div>
+            <div class="bar-val">$2.5M</div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-lbl">15-yr TCO</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:100%;background:linear-gradient(90deg,#0ea5e9,#22d3ee,#6366f1)"></div>
+            </div>
+            <div class="bar-val">$54.1M</div>
+          </div>
+        </div>
+        <p class="tco-note">
+          Calibrated against LusoSpace AIS/VDES program (€15M reported investment).
+          Model accuracy: ±10% vs. real-world benchmarks.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ────────────────── PRICING ────────────────── -->
+<section id="pricing" aria-label="Pricing">
+  <div class="container">
+    <div class="section-header reveal">
+      <span class="section-tag">Pricing</span>
+      <h2 class="section-title">Simple, transparent<br><span class="gradient-text">mission-aligned pricing</span></h2>
+      <p class="section-desc">From academic research to enterprise constellation programs.</p>
+    </div>
+
+    <div class="pricing-grid">
+      <!-- Explorer -->
+      <div class="pricing-card reveal">
+        <div class="plan-name">Explorer</div>
+        <div class="plan-price">Free</div>
+        <p class="plan-desc">For researchers and students exploring constellation design fundamentals.</p>
+        <ul class="plan-features">
+          <li><span class="ck">✓</span> Up to 3 constellation configurations</li>
+          <li><span class="ck">✓</span> AIS coverage heatmaps</li>
+          <li><span class="ck">✓</span> Matplotlib &amp; Plotly visualisations</li>
+          <li><span class="ck">✓</span> 5 simulations / month</li>
+          <li><span class="ck">✓</span> Community forum support</li>
+        </ul>
+        <a href="/constellation-simulator/login" class="plan-cta cta-ghost">Get Started Free</a>
+      </div>
+
+      <!-- Pro (featured) -->
+      <div class="pricing-card featured reveal">
+        <div class="pricing-ribbon">Most Popular</div>
+        <div class="plan-name">Pro</div>
+        <div class="plan-price">$299 <sub>/ month</sub></div>
+        <p class="plan-desc">For aerospace engineers and NewSpace startups designing operational systems.</p>
+        <ul class="plan-features">
+          <li><span class="ck">✓</span> Unlimited configurations</li>
+          <li><span class="ck">✓</span> AIS + VDES RF link analysis</li>
+          <li><span class="ck">✓</span> 15-year TCO modelling</li>
+          <li><span class="ck">✓</span> AI insights assistant</li>
+          <li><span class="ck">✓</span> Batch simulation engine</li>
+          <li><span class="ck">✓</span> Interactive HTML exports</li>
+          <li><span class="ck">✓</span> REST API access</li>
+          <li><span class="ck">✓</span> Priority email support</li>
+        </ul>
+        <a href="/constellation-simulator/login" class="plan-cta cta-solid">Start 14-Day Trial</a>
+      </div>
+
+      <!-- Enterprise -->
+      <div class="pricing-card reveal">
+        <div class="plan-name">Enterprise</div>
+        <div class="plan-price">Custom</div>
+        <p class="plan-desc">For defense programs, space agencies, and multi-team constellation programs.</p>
+        <ul class="plan-features">
+          <li><span class="ck">✓</span> Everything in Pro</li>
+          <li><span class="ck">✓</span> On-premise deployment</li>
+          <li><span class="ck">✓</span> SSO / LDAP integration</li>
+          <li><span class="ck">✓</span> Custom constellation templates</li>
+          <li><span class="ck">✓</span> SLA guarantees</li>
+          <li><span class="ck">✓</span> Dedicated solutions engineer</li>
+          <li><span class="ck">✓</span> Export-controlled data handling</li>
+        </ul>
+        <a href="mailto:contact@constellasim.com" class="plan-cta cta-ghost">Contact Sales</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ────────────────── FINAL CTA ────────────────── -->
+<section id="cta" aria-label="Call to action">
+  <div class="container">
+    <div class="cta-box reveal">
+      <div style="margin-bottom:1.5rem">
+        <span class="badge">🛰️ &nbsp;Launch your first simulation in 60 seconds</span>
+      </div>
+      <h2 class="cta-title">Ready to model<br><span class="gradient-text">your constellation?</span></h2>
+      <p class="cta-desc">Join aerospace engineers, NewSpace startups, and researchers who trust ConstellaSim for mission-critical constellation design.</p>
+      <div class="cta-btns">
+        <a href="/constellation-simulator/login" class="btn-primary">Start for Free</a>
+        <a href="mailto:contact@constellasim.com" class="btn-secondary">Talk to an Expert</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ────────────────── FOOTER ────────────────── -->
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <span class="footer-copy">© 2026 ConstellaSim. Physics-based constellation simulation platform.</span>
+      <div class="footer-links">
+        <a href="#features">Features</a>
+        <a href="#pricing">Pricing</a>
+        <a href="mailto:contact@constellasim.com">Contact</a>
+        <a href="/constellation-simulator/login">Login</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- ────────────────── SCRIPTS ────────────────── -->
+<script>
+(function () {
+  'use strict';
+
+  /* ── STARFIELD + ORBITAL ANIMATION ── */
+  const canvas = document.getElementById('starfield');
+  const ctx    = canvas.getContext('2d');
+
+  function resize() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+    // recentre orbitals on resize
+    orbitals.forEach(o => {
+      o.cx = window.innerWidth  / 2;
+      o.cy = window.innerHeight * 0.44;
+    });
+  }
+
+  // Stars
+  function makeStars(n) {
+    return Array.from({ length: n }, () => ({
+      x:      Math.random() * window.innerWidth,
+      y:      Math.random() * window.innerHeight,
+      r:      Math.random() * 1.4 + 0.3,
+      alpha:  Math.random(),
+      twinkle: Math.random() * 0.018 + 0.004,
+      dir:    Math.random() > 0.5 ? 1 : -1,
+    }));
+  }
+  const stars = makeStars(220);
+
+  // Orbital satellites
+  const orbitals = Array.from({ length: 9 }, (_, i) => ({
+    angle:  (i / 9) * Math.PI * 2,
+    radius: 160 + i * 35,
+    speed:  0.0032 + i * 0.0004,
+    size:   1.8 + Math.random() * 0.8,
+    cx:     window.innerWidth  / 2,
+    cy:     window.innerHeight * 0.44,
+    tilt:   0.28 + i * 0.045,
+  }));
+
+  resize();
+  window.addEventListener('resize', resize);
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Stars
+    stars.forEach(s => {
+      s.alpha += s.twinkle * s.dir;
+      if (s.alpha >= 1 || s.alpha <= 0.08) s.dir *= -1;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(180, 220, 255, ${s.alpha})`;
+      ctx.fill();
+    });
+
+    // Orbit rings
+    orbitals.forEach(o => {
+      ctx.beginPath();
+      ctx.ellipse(o.cx, o.cy, o.radius, o.radius * o.tilt, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(14, 165, 233, 0.05)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+
+    // Satellites
+    orbitals.forEach(o => {
+      o.angle += o.speed;
+      const x = o.cx + Math.cos(o.angle) * o.radius;
+      const y = o.cy + Math.sin(o.angle) * o.radius * o.tilt;
+
+      // Glow halo
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, 9);
+      grad.addColorStop(0, 'rgba(14, 165, 233, 0.7)');
+      grad.addColorStop(1, 'rgba(14, 165, 233, 0)');
+      ctx.beginPath();
+      ctx.arc(x, y, 9, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Satellite dot
+      ctx.beginPath();
+      ctx.arc(x, y, o.size, 0, Math.PI * 2);
+      ctx.fillStyle = '#bae6fd';
+      ctx.fill();
+    });
+
+    requestAnimationFrame(animate);
+  }
+
+  animate();
+
+  /* ── SCROLL REVEAL ── */
+  const reveals  = document.querySelectorAll('.reveal');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.1 });
+  reveals.forEach(el => observer.observe(el));
+
+  /* ── NAV ACTIVE LINK ── */
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('.nav-links a');
+
+  const sectionObserver = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(a => {
+          a.style.color = a.getAttribute('href') === '#' + e.target.id
+            ? 'var(--text)' : '';
+        });
+      }
+    });
+  }, { rootMargin: '-40% 0px -55% 0px' });
+
+  sections.forEach(s => sectionObserver.observe(s));
+})();
+</script>
+</body>
+</html>

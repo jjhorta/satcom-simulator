@@ -13,7 +13,7 @@ from ..autotags import generate_autotags
 from ..config import Settings, get_settings
 from ..job_store import create_job, get_job, list_jobs, update_job
 from ..models import (
-    HeatmapRequest, JobListItem, JobStatus, JobRequest,
+    HeatmapRequest, HeatmapRfRequest, JobListItem, JobStatus, JobRequest,
     OrbitRequest, RouteRequest, SkyRequest, TrackRequest,
     UpdateJobMeta,
 )
@@ -22,11 +22,12 @@ from ..settings_store import get_active_constellation_presets
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 _DISPATCH = {
-    "heatmap": HeatmapRequest,
-    "sky": SkyRequest,
-    "orbit": OrbitRequest,
-    "track": TrackRequest,
-    "route": RouteRequest,
+    "heatmap":    HeatmapRequest,
+    "heatmap-rf": HeatmapRfRequest,
+    "sky":        SkyRequest,
+    "orbit":      OrbitRequest,
+    "track":      TrackRequest,
+    "route":      RouteRequest,
 }
 
 
@@ -147,6 +148,21 @@ async def get_tco_data(
     return data
 
 
+@router.get("/{job_id}/tles")
+async def get_tles(
+    job_id: str,
+    settings: Settings = Depends(get_settings),
+    _: str = Depends(get_current_user),
+):
+    """Return saved TLE JSON for an orbit job."""
+    import json
+    job_dir = settings.outputs_dir / job_id
+    matches = sorted(job_dir.glob("tles_*.json"))
+    if not matches:
+        raise HTTPException(status_code=404, detail="No TLE data found for this job")
+    return json.loads(matches[0].read_text(encoding="utf-8"))
+
+
 @router.get("/{job_id}/ai-analysis")
 async def get_ai_analysis(
     job_id: str,
@@ -194,7 +210,7 @@ async def get_csv_as_json(
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
 
-    FLOAT_COLS = {"latitude", "longitude", "availability_pct", "connectivity_pct", "lat", "lon"}
+    FLOAT_COLS = {"latitude", "longitude", "availability_pct", "rf_availability_pct", "connectivity_pct", "lat", "lon"}
     INT_COLS   = {"sequence"}
     rows = []
     async with aiofiles.open(file_path, mode="r", encoding="utf-8") as f:

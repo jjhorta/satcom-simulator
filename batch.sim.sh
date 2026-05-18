@@ -42,7 +42,8 @@ show_help() {
     echo -e "    ${GREEN}orbit${NC}      - Generate 3D orbital view animation"
     echo -e "    ${GREEN}track${NC}      - Generate ground track visualization"
     echo -e "    ${GREEN}coverage${NC}   - Run coverage analysis (sky views + CSV)"
-    echo -e "    ${GREEN}heatmap${NC}    - Generate global coverage heatmap"
+    echo -e "    ${GREEN}heatmap${NC}    - Generate global coverage heatmap (geometric)"
+    echo -e "    ${GREEN}heatmap-rf${NC} - Generate RF link budget heatmap"
     echo -e "    ${GREEN}all${NC}        - Generate all views above"
     echo -e "    ${GREEN}help${NC}       - Show this help message"
     echo ""
@@ -252,6 +253,38 @@ run_heatmap() {
     organize_outputs "$NAME"
 }
 
+# Run RF link budget heatmap
+run_heatmap_rf() {
+    local NAME=$1
+    shift
+
+    local HEATMAP_RF_ARGS=""
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --inc)
+                HEATMAP_RF_ARGS="$HEATMAP_RF_ARGS --inclination $2"
+                shift 2
+                ;;
+            --sats|--planes|--altitude|--phasing|--inclination|--sso|--bidi|--comms|--weather|--res|--min-elev)
+                HEATMAP_RF_ARGS="$HEATMAP_RF_ARGS $1"
+                [[ $1 != --sso && $1 != --bidi ]] && { HEATMAP_RF_ARGS="$HEATMAP_RF_ARGS $2"; shift; }
+                shift
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+
+    if [[ ! "$HEATMAP_RF_ARGS" =~ "--comms" ]]; then HEATMAP_RF_ARGS="$HEATMAP_RF_ARGS --comms vdes"; fi
+    if [[ ! "$HEATMAP_RF_ARGS" =~ "--weather" ]]; then HEATMAP_RF_ARGS="$HEATMAP_RF_ARGS --weather clear"; fi
+    if [[ ! "$HEATMAP_RF_ARGS" =~ "--res" ]]; then HEATMAP_RF_ARGS="$HEATMAP_RF_ARGS --res 5.0"; fi
+
+    echo -e "${YELLOW}📡 Generating RF Link Budget Heatmap for: $NAME${NC}"
+    python "$PYTHON_SCRIPT" heatmap-rf $HEATMAP_RF_ARGS
+    organize_outputs "$NAME"
+}
+
 # Run all views
 run_all() {
     local NAME=$1
@@ -430,12 +463,15 @@ if [[ "$COMMAND" =~ ^(scenario|sc)$ ]]; then
         heatmap)
             run_heatmap "$SCENARIO_NAME" $SCENARIO_PARAMS
             ;;
+        heatmap-rf)
+            run_heatmap_rf "$SCENARIO_NAME" $SCENARIO_PARAMS
+            ;;
         all)
             run_all "$SCENARIO_NAME" "$SCENARIO_CATEGORY" $SCENARIO_PARAMS
             ;;
         *)
             echo -e "${RED}❌ Error: Unknown view type '$VIEW_TYPE'${NC}"
-            echo "Valid view types: orbit, track, coverage, heatmap, all"
+            echo "Valid view types: orbit, track, coverage, heatmap, heatmap-rf, all"
             exit 1
             ;;
     esac
@@ -483,6 +519,9 @@ case "$COMMAND" in
     heatmap)
         run_heatmap "$NAME" $FULL_ARGS
         ;;
+    heatmap-rf)
+        run_heatmap_rf "$NAME" $FULL_ARGS
+        ;;
     all)
         # Extract category if provided via --category flag
         CATEGORY=""
@@ -494,7 +533,7 @@ case "$COMMAND" in
         ;;
     *)
         echo -e "${RED}❌ Error: Unknown command '$COMMAND'${NC}"
-        echo "Valid commands: orbit, track, coverage, heatmap, all, scenario, sc, help"
+        echo "Valid commands: orbit, track, coverage, heatmap, heatmap-rf, all, scenario, sc, help"
         exit 1
         ;;
 esac

@@ -347,3 +347,52 @@ def print_constellation_dashboard(metrics, tco_data=None, filename=None):
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(dashboard_text)
         print(f"💾 Dashboard saved to: {output_file}")
+
+
+# ---------------------------------------------------------------------------
+# Multi-shell dashboard
+# ---------------------------------------------------------------------------
+
+def print_multi_shell_dashboard(shells_cfg, agg_metrics, filename=None):
+    """Print a combined dashboard for a multi-shell constellation.
+
+    Args:
+        shells_cfg  : list of shell dicts (same as passed to generate_multi_shell_tles)
+        agg_metrics : result of aggregate_constellation_metrics()
+        filename    : optional text file to save (without extension)
+    """
+    combined = agg_metrics['combined']
+    per_shell = agg_metrics['per_shell']
+
+    lines = []
+    lines.append("=" * 80)
+    lines.append("🌐 MULTI-SHELL CONSTELLATION DASHBOARD")
+    lines.append("=" * 80)
+    lines.append(f"\n  Total Satellites   : {combined['total_satellites']}")
+    lines.append(f"  Number of Shells   : {combined['num_shells']}")
+    lines.append(f"  Combined Coverage  : ~{combined['approx_combined_coverage_pct']:.1f}% of Earth surface")
+    lines.append(f"  Best Revisit Time  : {combined['best_shell_revisit_min']:.1f} min")
+    lines.append("")
+    lines.append(f"{'Shell':<30} {'Sats':>6} {'Planes':>7} {'Inc°':>6} {'Alt km':>7} "
+                 f"{'Cov Rad km':>11} {'Period min':>11}")
+    lines.append("-" * 80)
+
+    for i, (sh, m) in enumerate(zip(shells_cfg, per_shell)):
+        label = sh.get('name') or f"Shell-{i+1} {sh['inclination']:.1f}°"
+        cov   = m['coverage']
+        orb   = m['orbital']
+        lines.append(
+            f"  {label:<28} {sh['sats']:>6} {sh['planes']:>7} "
+            f"{sh['inclination']:>6.1f} {sh['altitude_km']:>7.0f} "
+            f"{cov['radius_km']:>11.0f} {orb['period_min']:>11.1f}"
+        )
+
+    lines.append("\n" + "=" * 80 + "\n")
+    text = "\n".join(lines)
+    print(text)
+
+    if filename:
+        out = f"{filename}.txt"
+        with open(out, 'w', encoding='utf-8') as f:
+            f.write(text)
+        print(f"💾 Multi-shell dashboard saved: {out}")
