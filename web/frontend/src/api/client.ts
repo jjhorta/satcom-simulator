@@ -31,7 +31,9 @@ http.interceptors.response.use(
   (err) => {
     if (err.response?.status === 401) {
       useAuthStore.getState().logout()
-      window.location.href = '/login'
+      // Redirect to the app's base login path so hosted bases (e.g. /constellation-simulator/) work
+      const base = import.meta.env.BASE_URL || '/'
+      window.location.href = `${base}login`.replace(/([^:]?)\/\//g, '$1/')
     }
     return Promise.reject(err)
   },
