@@ -13,9 +13,56 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    # Extended fields returned on login/register — optional so existing code stays compatible
+    user: Optional[dict] = None
 
 
-# ── Constellation shared params ───────────────────────────────────────────────
+# ── User / Org / RBAC response models ────────────────────────────────────────
+
+RoleType = Literal["admin", "team_manager", "creator", "viewer", "demo"]
+
+
+class UserOut(BaseModel):
+    id: int
+    email: str
+    username: str
+    role: RoleType
+    org_id: Optional[int] = None
+    org_name: Optional[str] = None
+    is_active: bool = True
+    created_at: Optional[str] = None
+    last_login_at: Optional[str] = None
+    jobs_used_this_month: int = 0
+    demo_expires_at: Optional[str] = None
+    demo_jobs_remaining: Optional[int] = None
+
+
+class OrgOut(BaseModel):
+    id: int
+    name: str
+    slug: str
+    owner_id: int
+    max_members: int = 20
+    subscription_tier: str = "free"
+    created_at: Optional[str] = None
+
+
+class RegisterRequest(BaseModel):
+    email: str = Field(..., pattern=r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
+    password: str = Field(..., min_length=8)
+    org_name: Optional[str] = None
+    role: Optional[str] = "creator"
+
+
+class UpdateRoleRequest(BaseModel):
+    new_role: RoleType
+
+
+class InviteRequest(BaseModel):
+    email: str = Field(..., pattern=r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
+    role: RoleType = "creator"
+
+
 
 class ConstellationParams(BaseModel):
     sats: int = Field(66, ge=1, le=10000)
@@ -159,6 +206,11 @@ class JobStatus(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     tags: list[str] = []
+    # Ownership
+    user_id: Optional[int] = None
+    org_id: Optional[int] = None
+    user_email: Optional[str] = None
+    username: Optional[str] = None
 
 
 class JobListItem(BaseModel):
@@ -169,6 +221,10 @@ class JobListItem(BaseModel):
     completed_at: Optional[str] = None
     title: Optional[str] = None
     tags: list[str] = []
+    # Ownership
+    user_id: Optional[int] = None
+    org_id: Optional[int] = None
+    username: Optional[str] = None
 
 
 class UpdateJobMeta(BaseModel):

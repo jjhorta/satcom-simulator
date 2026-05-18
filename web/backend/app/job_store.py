@@ -108,6 +108,9 @@ def list_jobs(outputs_dir: Path) -> list[JobListItem]:
                 completed_at=data.get("completed_at"),
                 title=data.get("title"),
                 tags=data.get("tags", []),
+                user_id=data.get("user_id"),
+                org_id=data.get("org_id"),
+                username=data.get("username"),
             ))
         except Exception:
             continue

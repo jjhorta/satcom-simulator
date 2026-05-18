@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { LogOut, Satellite, HelpCircle, Settings } from 'lucide-react'
+import { LogOut, Satellite, HelpCircle, Settings, ShieldAlert, Users } from 'lucide-react'
 import { useAuthStore }  from '../store/authStore'
 import { useReportStore } from '../store/reportStore'
 import { useAiStore }    from '../store/aiStore'
@@ -10,9 +10,12 @@ import JobList          from '../components/JobList'
 import ReportList       from '../components/ReportList'
 import JobDetail        from '../components/JobDetail'
 import FullReportViewer from '../components/viewers/FullReportViewer'
+import RoleBadge        from '../components/RoleBadge'
 
 export default function DashboardPage() {
   const logout      = useAuthStore((s) => s.logout)
+  const role        = useAuthStore((s) => s.role)
+  const user        = useAuthStore((s) => s.user)
   const reports     = useReportStore((s) => s.reports)
   const viewingId   = useReportStore((s) => s.viewingId)
   const loadReports = useReportStore((s) => s.loadReports)
@@ -54,8 +57,23 @@ export default function DashboardPage() {
         <div className="flex items-center gap-2">
           <Satellite className="w-5 h-5 text-indigo-400" />
           <span className="font-semibold text-white">Constellation Simulator</span>
+          {role && <RoleBadge role={role} className="hidden sm:inline-flex" />}
         </div>
         <div className="flex items-center gap-3">
+          {role === 'admin' && (
+            <Link to="/admin"
+              className="flex items-center gap-1.5 text-sm text-purple-400 hover:text-white transition-colors">
+              <ShieldAlert className="w-4 h-4" />
+              Admin
+            </Link>
+          )}
+          {(role === 'admin' || role === 'team_manager') && (
+            <Link to="/team"
+              className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors">
+              <Users className="w-4 h-4" />
+              Team
+            </Link>
+          )}
           <Link
             to="/settings"
             className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors"
@@ -79,6 +97,24 @@ export default function DashboardPage() {
           </button>
         </div>
       </header>
+
+      {/* Demo warning banner */}
+      {role === 'demo' && user && (
+        <div className="bg-amber-900/40 border-b border-amber-700/50 px-6 py-2 flex items-center gap-3 text-sm">
+          <span className="text-amber-300 font-medium">Demo account</span>
+          <span className="text-amber-400/80">
+            {user.demo_jobs_remaining !== null && user.demo_jobs_remaining !== undefined
+              ? `${user.demo_jobs_remaining} simulation${user.demo_jobs_remaining !== 1 ? 's' : ''} remaining`
+              : ''}
+            {user.demo_expires_at
+              ? ` · Expires ${new Date(user.demo_expires_at).toLocaleDateString()}`
+              : ''}
+          </span>
+          <Link to="/register" className="ml-auto text-amber-300 hover:text-amber-100 underline text-xs">
+            Upgrade →
+          </Link>
+        </div>
+      )}
 
       {/* ── Main layout ──────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">

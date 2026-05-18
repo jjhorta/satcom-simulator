@@ -8,6 +8,7 @@ from .api.options_routes import router as options_router
 from .api.settings_routes import router as settings_router
 from .api.ai_routes import router as ai_router
 from .api.reports_routes import router as reports_router
+from .api.admin_routes import router as admin_router, org_router
 
 settings = get_settings()
 
@@ -34,6 +35,31 @@ app.include_router(options_router)
 app.include_router(settings_router)
 app.include_router(ai_router)
 app.include_router(reports_router)
+app.include_router(admin_router)
+app.include_router(org_router)
+
+
+@app.on_event("startup")
+async def startup():
+    """Initialise DB and seed the bootstrap admin user if not present."""
+    from .db import init_db, get_user_by_email, create_user
+    from .auth import hash_password
+
+    init_db(settings.outputs_dir)
+
+    admin = get_user_by_email(settings.outputs_dir, settings.admin_email)
+    if not admin:
+        pw_hash = hash_password(settings.admin_password)
+        create_user(
+            settings.outputs_dir,
+            email=settings.admin_email,
+            username=settings.admin_username,
+            password_hash=pw_hash,
+            role="admin",
+        )
+        print(f"✅ Admin user created: {settings.admin_email}")
+    else:
+        print(f"ℹ️  Admin user already exists: {settings.admin_email}")
 
 
 @app.get("/api/health")

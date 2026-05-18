@@ -1,10 +1,13 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
 import HelpPage from './pages/HelpPage'
 import SettingsPage from './pages/SettingsPage'
 import SharedReportPage from './pages/SharedReportPage'
+import AdminPage from './pages/AdminPage'
+import TeamPage from './pages/TeamPage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token)
@@ -19,10 +22,13 @@ export default function App() {
         <Route path="/shared/:token" element={<SharedReportPage />} />
 
         {/* Auth routes */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/help" element={<PrivateRoute><HelpPage /></PrivateRoute>} />
+        <Route path="/login"    element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/help"     element={<PrivateRoute><HelpPage /></PrivateRoute>} />
         <Route path="/settings" element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
-        <Route path="/*" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
+        <Route path="/admin"    element={<PrivateRoute><AdminPage /></PrivateRoute>} />
+        <Route path="/team"     element={<PrivateRoute><TeamPage /></PrivateRoute>} />
+        <Route path="/*"        element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
       </Routes>
     </BrowserRouter>
   )

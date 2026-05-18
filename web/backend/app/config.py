@@ -8,7 +8,12 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "CHANGE_ME_IN_PRODUCTION_USE_openssl_rand_hex_32"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440  # 24 hours
+
+    # Bootstrap admin (used only on first startup to seed the DB)
     admin_username: str = "admin"
+    admin_email: str = "admin@constellasim.com"
+    admin_password: str = "CHANGE_ME_ADMIN_PASSWORD"
+    # Legacy hash field kept so existing .env files don't break
     admin_password_hash: str = "$2b$12$placeholder_hash_change_in_env"
 
     # Redis / RQ
@@ -18,6 +23,9 @@ class Settings(BaseSettings):
     # Paths
     outputs_dir: Path = Path("/app/outputs")
     simulator_root: Path = Path("/app/simulator")
+
+    # App base URL (for invite links)
+    app_url: str = "http://localhost"
 
     # CORS origins (comma-separated)
     cors_origins: str = "*"

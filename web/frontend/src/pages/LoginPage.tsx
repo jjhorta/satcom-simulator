@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { login } from '../api/client'
 
@@ -8,19 +8,27 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error,    setError]    = useState('')
   const [loading,  setLoading]  = useState(false)
-  const setToken  = useAuthStore((s) => s.setToken)
-  const navigate  = useNavigate()
+  const { setToken, setUser } = useAuthStore()
+  const navigate = useNavigate()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
-      const { access_token } = await login({ username, password })
-      setToken(access_token)
+      const resp = await login({ username, password })
+      setToken(resp.access_token)
+      if (resp.user) setUser(resp.user)
       navigate('/')
-    } catch {
-      setError('Invalid username or password.')
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      if (detail === 'Incorrect email or password' || detail === 'Incorrect username or password') {
+        setError('Incorrect email or password. Please try again.')
+      } else if (detail === 'Account deactivated') {
+        setError('This account has been deactivated. Contact your administrator.')
+      } else {
+        setError('Sign-in failed. Please check your credentials.')
+      }
     } finally {
       setLoading(false)
     }
@@ -48,13 +56,14 @@ export default function LoginPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">
-                Username
+                Email
               </label>
               <input
                 type="text"
                 autoComplete="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                placeholder="you@example.com"
                 required
                 className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700
                            text-white placeholder-gray-500 focus:outline-none focus:ring-2
@@ -94,8 +103,14 @@ export default function LoginPage() {
           >
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
+
+          <p className="mt-4 text-center text-xs text-gray-500">
+            Don't have an account?{' '}
+            <Link to="/register" className="text-indigo-400 hover:text-indigo-300">Register</Link>
+          </p>
         </form>
       </div>
     </div>
   )
 }
+

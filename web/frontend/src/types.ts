@@ -1,6 +1,58 @@
 // ── Auth ───────────────────────────────────────────────────────────────────────
 export interface LoginRequest { username: string; password: string }
-export interface TokenResponse { access_token: string; token_type: string }
+export interface TokenResponse {
+  access_token: string
+  token_type:   string
+  user?:        UserInfo
+}
+
+// ── RBAC ──────────────────────────────────────────────────────────────────────
+export type UserRole = 'admin' | 'team_manager' | 'creator' | 'viewer' | 'demo'
+
+export interface UserInfo {
+  id:                   number
+  email:                string
+  username:             string
+  role:                 UserRole
+  org_id?:              number | null
+  org_name?:            string | null
+  is_active?:           boolean
+  created_at?:          string
+  last_login_at?:       string
+  jobs_used_this_month?: number
+  demo_expires_at?:     string | null
+  demo_jobs_remaining?: number | null
+}
+
+export interface OrgInfo {
+  id:                number
+  name:              string
+  slug:              string
+  owner_id:          number
+  max_members:       number
+  subscription_tier: string
+  created_at?:       string
+  members?:          UserInfo[]
+}
+
+export interface InvitationInfo {
+  id:          number
+  org_id:      number
+  email:       string
+  role:        UserRole
+  token:       string
+  expires_at:  string
+  accepted_at: string | null
+  created_at:  string
+  link?:       string
+}
+
+export interface RegisterRequest {
+  email:     string
+  password:  string
+  org_name?: string
+  role?:     'creator' | 'demo'
+}
 
 // ── Options (from GET /api/options) ──────────────────────────────────────────
 export interface ConstellationPreset {
@@ -78,6 +130,9 @@ export interface JobStatus {
   title?:       string
   description?: string
   tags:         string[]
+  user_id?:     number | null
+  org_id?:      number | null
+  username?:    string | null
 }
 
 export interface JobListItem {
@@ -87,6 +142,9 @@ export interface JobListItem {
   created_at: string
   title?:     string
   tags:       string[]
+  user_id?:   number | null
+  org_id?:    number | null
+  username?:  string | null
 }
 
 // ── Request bodies ─────────────────────────────────────────────────────────────

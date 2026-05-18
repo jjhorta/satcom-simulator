@@ -11,12 +11,14 @@ from rq import Queue
 from ..auth import get_current_user
 from ..autotags import generate_autotags
 from ..config import Settings, get_settings
+from ..db import increment_demo_job_count
 from ..job_store import create_job, get_job, list_jobs, update_job
 from ..models import (
     HeatmapRequest, HeatmapRfRequest, JobListItem, JobStatus, JobRequest,
     LatencyRequest, OrbitRequest, RouteRequest, SkyRequest, TrackRequest,
     UpdateJobMeta,
 )
+from ..rbac import get_effective_role, has_permission, demo_is_expired
 from ..settings_store import get_active_constellation_presets
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -42,8 +44,23 @@ async def submit_job(
     payload: dict,
     request: Request,
     settings: Settings = Depends(get_settings),
-    _: str = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
+    role = get_effective_role(user)
+
+    # Permission check
+    if not has_permission(role, "jobs:create"):
+        raise HTTPException(status_code=403, detail="Your role does not allow creating simulations")
+
+    # Demo limits
+    if role == "demo":
+        if demo_is_expired(user):
+            raise HTTPException(status_code=403, detail="Demo period has expired")
+        used  = user.get("demo_jobs_used", 0) or 0
+        limit = user.get("demo_jobs_limit", 10) or 10
+        if used >= limit:
+            raise HTTPException(status_code=429, detail="Demo simulation limit reached")
+
     mode = payload.get("mode")
     if mode not in _DISPATCH:
         raise HTTPException(status_code=400, detail=f"Unknown mode: {mode}")
@@ -59,6 +76,15 @@ async def submit_job(
 
     job = create_job(settings.outputs_dir, job_id, mode, params)
 
+    # Store ownership metadata
+    update_job(
+        settings.outputs_dir, job_id,
+        user_id=user.get("id"),
+        org_id=user.get("org_id"),
+        user_email=user.get("email", ""),
+        username=user.get("username", ""),
+    )
+
     # Auto-generate tags from params + constellation presets
     try:
         presets = get_active_constellation_presets(settings.simulator_root, settings.outputs_dir)
@@ -66,6 +92,10 @@ async def submit_job(
         update_job(settings.outputs_dir, job_id, tags=auto_tags)
     except Exception:
         pass  # tags are non-critical — never block submission
+
+    # Increment demo job counter
+    if role == "demo" and user.get("id"):
+        increment_demo_job_count(settings.outputs_dir, user["id"])
 
     # Enqueue RQ task
     q = _get_queue(settings)
@@ -89,9 +119,20 @@ async def submit_job(
 @router.get("", response_model=list[JobListItem])
 async def list_all_jobs(
     settings: Settings = Depends(get_settings),
-    _: str = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
-    return list_jobs(settings.outputs_dir)
+    role = get_effective_role(user)
+    all_jobs = list_jobs(settings.outputs_dir)
+
+    if has_permission(role, "jobs:view_team"):
+        if role == "admin":
+            return all_jobs  # admin sees everything
+        # team_manager sees own org
+        org_id = user.get("org_id")
+        return [j for j in all_jobs if j.org_id == org_id or j.user_id == user.get("id")]
+    elif has_permission(role, "jobs:view_own"):
+        return [j for j in all_jobs if j.user_id == user.get("id")]
+    return []
 
 
 @router.get("/{job_id}", response_model=JobStatus)
@@ -99,13 +140,25 @@ async def get_job_status(
     job_id: str,
     request: Request,
     settings: Settings = Depends(get_settings),
-    _: str = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
     base_url = str(request.base_url).rstrip("/")
     job = get_job(settings.outputs_dir, job_id, base_url)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    # Scope check
+    role = get_effective_role(user)
+    if not _can_access_job(job, user, role):
+        raise HTTPException(status_code=403, detail="Access denied")
     return job
+
+
+def _can_access_job(job, user: dict, role: str) -> bool:
+    if has_permission(role, "jobs:delete_any"):
+        return True
+    if has_permission(role, "jobs:view_team"):
+        return job.org_id == user.get("org_id") or job.user_id == user.get("id")
+    return job.user_id == user.get("id")
 
 
 @router.get("/{job_id}/files/{filename}")
@@ -249,10 +302,25 @@ async def update_job_meta(
 async def delete_job(
     job_id: str,
     settings: Settings = Depends(get_settings),
-    _: str = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
     import shutil
     job_dir = settings.outputs_dir / job_id
     if not job_dir.exists():
         raise HTTPException(status_code=404, detail="Job not found")
+
+    job = get_job(settings.outputs_dir, job_id)
+    role = get_effective_role(user)
+
+    if has_permission(role, "jobs:delete_any"):
+        pass
+    elif has_permission(role, "jobs:delete_team"):
+        if job and job.org_id != user.get("org_id"):
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif has_permission(role, "jobs:delete_own"):
+        if job and job.user_id != user.get("id"):
+            raise HTTPException(status_code=403, detail="Access denied")
+    else:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
     shutil.rmtree(job_dir)

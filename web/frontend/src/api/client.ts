@@ -9,6 +9,11 @@ import type {
   HeatmapRow,
   MultiShellGroupRecord,
   ReportState,
+  RegisterRequest,
+  UserInfo,
+  UserRole,
+  OrgInfo,
+  InvitationInfo,
 } from '../types'
 import { useAuthStore } from '../store/authStore'
 
@@ -51,6 +56,38 @@ export const login = (body: LoginRequest) => {
     })
     .then((r) => r.data)
 }
+
+export const register = (body: RegisterRequest) =>
+  http.post<TokenResponse>('/auth/register', body).then((r) => r.data)
+
+export const getMe = () =>
+  http.get<UserInfo>('/auth/me').then((r) => r.data)
+
+// ── Admin ──────────────────────────────────────────────────────────────────────
+export const adminListUsers = (params?: { page?: number; per_page?: number; role?: string; org_id?: number; search?: string }) =>
+  http.get<{ total: number; page: number; per_page: number; users: UserInfo[] }>('/admin/users', { params }).then((r) => r.data)
+
+export const adminUpdateRole = (userId: number, newRole: UserRole) =>
+  http.patch(`/admin/users/${userId}/role`, { new_role: newRole }).then((r) => r.data)
+
+export const adminDeactivateUser = (userId: number) =>
+  http.post(`/admin/users/${userId}/deactivate`).then((r) => r.data)
+
+export const adminActivateUser = (userId: number) =>
+  http.post(`/admin/users/${userId}/activate`).then((r) => r.data)
+
+export const adminListOrgs = () =>
+  http.get<OrgInfo[]>('/admin/organizations').then((r) => r.data)
+
+// ── Org / Team ─────────────────────────────────────────────────────────────────
+export const getTeamMembers = () =>
+  http.get<{ members: UserInfo[] }>('/orgs/members').then((r) => r.data)
+
+export const inviteTeamMember = (email: string, role: UserRole) =>
+  http.post<{ invitation: InvitationInfo; link: string }>('/orgs/invite', { email, role }).then((r) => r.data)
+
+export const acceptInvitation = (token: string) =>
+  http.post<{ success: boolean; org_id: number; role: string }>(`/orgs/accept?token=${encodeURIComponent(token)}`).then((r) => r.data)
 
 // ── Options ───────────────────────────────────────────────────────────────────
 export const fetchOptions = () =>
