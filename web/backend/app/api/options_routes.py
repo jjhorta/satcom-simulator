@@ -5,6 +5,8 @@ from ..auth import get_current_user
 from ..config import get_settings
 from ..models import OptionsResponse, MultiShellPreset, ShellDef
 from ..settings_store import get_active_constellation_presets, get_active_multi_shell_groups
+from ..tier_config import get_limits
+from ..rbac import get_effective_role
 
 router = APIRouter(prefix="/api/options", tags=["options"])
 
@@ -22,9 +24,11 @@ def _get_sim_constants():
 @router.get("", response_model=OptionsResponse)
 async def get_options(
     app_settings=Depends(get_settings),
-    _: str = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
     c = _get_sim_constants()
+    role = get_effective_role(user)
+    limits = get_limits(role)
     presets = get_active_constellation_presets(app_settings.simulator_root, app_settings.outputs_dir)
 
     # Build known_constellations from the merged store (built-ins + user groups)
@@ -56,4 +60,14 @@ async def get_options(
         backends=c.AVAILABLE_BACKENDS,
         constellation_presets=presets,
         known_constellations=known,
+        role=role,
+        limits={
+            "max_sats": limits["max_sats"],
+            "jobs_per_month": limits["jobs_per_month"],
+            "concurrent_jobs": limits["concurrent_jobs"],
+            "heatmap_resolution": limits["heatmap_resolution"],
+            "multi_shell": limits["multi_shell"],
+            "export_formats": limits["export_formats"],
+            "can_create_jobs": limits.get("can_create_jobs", False),
+        },
     )

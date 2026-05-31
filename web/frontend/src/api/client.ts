@@ -20,7 +20,7 @@ import { useAuthStore } from '../store/authStore'
 // BASE_URL is injected by Vite from the `base` config option.
 // In production: '/constellation-simulator/'  →  baseURL = '/constellation-simulator/api'
 // In dev (same base):   '/constellation-simulator/'  → proxied by vite dev server
-const apiBase = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api`
+export const apiBase = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api`
 const http = axios.create({ baseURL: apiBase })
 
 // Attach JWT bearer token to every request
@@ -228,3 +228,53 @@ export const deleteMultiShellGroup = (name: string) =>
   http.delete<MultiShellGroupRecord>(`/settings/multi-shells/${encodeURIComponent(name)}`).then((r) => r.data)
 export const resetMultiShellGroups = () =>
   http.delete<MultiShellGroupRecord>('/settings/multi-shells').then((r) => r.data)
+
+
+// ── Billing API ──────────────────────────────────────────────────────────
+export const getSubscription = () =>
+  http.get('/billing/subscription').then((r) => r.data)
+
+export const createCheckoutSession = (priceId: string) =>
+  http.post<{ url: string }>('/billing/create-checkout', { price_id: priceId }).then((r) => r.data)
+
+export const getPortalUrl = () =>
+  http.get<{ url: string }>('/billing/portal').then((r) => r.data)
+
+// ── Batch Sweep API ──────────────────────────────────────────────────────────
+export const submitBatchJob = (body: Record<string, unknown>) =>
+  http.post('/jobs/batch', body).then((r) => r.data)
+// ── CARL API ────────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const getCarlConfig = (): Promise<any> =>
+  http.get('/carl/config').then((r) => r.data)
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const updateCarlConfig = (body: Record<string, unknown>): Promise<any> =>
+  http.put('/carl/config', body).then((r) => r.data)
+// ── CARL Chat API ──────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const listCarlChats = (): Promise<any> =>
+  http.get('/carl/chats').then((r) => r.data)
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const createCarlChat = (name?: string): Promise<any> =>
+  http.post('/carl/chats', { name }).then((r) => r.data)
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const getCarlChat = (chatId: string): Promise<any> =>
+  http.get(`/carl/chats/${chatId}`).then((r) => r.data)
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const updateCarlChat = (chatId: string, name: string): Promise<any> =>
+  http.put(`/carl/chats/${chatId}`, { name }).then((r) => r.data)
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const deleteCarlChat = (chatId: string): Promise<any> =>
+  http.delete(`/carl/chats/${chatId}`).then((r) => r.data)
+
+// ── Password reset ───────────────────────────────────────────────────-
+export const forgotPassword = (email: string) =>
+  http.post('/auth/forgot-password', { email }).then(r => r.data)
+
+export const resetPassword = (token: string, password: string) =>
+  http.post('/auth/reset-password', { token, password }).then(r => r.data)

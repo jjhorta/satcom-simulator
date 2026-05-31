@@ -17,6 +17,23 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from sim.batch.sweep import SweepDefinition, SweepParam
+from sim.batch.summary import generate_summary_csv, generate_summary_json, generate_heatmap_grid
+
+
+# ── Watermark helper ──────────────────────────────────────────────
+
+
+def _apply_watermark(output_dir: str, tier: str) -> None:
+    """Apply watermark to PNG outputs if the user is on free tier."""
+    from pathlib import Path
+    try:
+        from ..app.watermark import should_watermark, apply_watermark
+        if should_watermark(tier):
+            for f in Path(output_dir).glob("*.png"):
+                apply_watermark(str(f))
+    except ImportError:
+        pass  # watermark module not available
 
 
 # ── Path helpers ──────────────────────────────────────────────────────────────
@@ -154,6 +171,7 @@ def _build_command(
         "shells",    # handled explicitly below
         # Constellation geometry handled in explicit loop below
         "sats", "planes", "altitude", "phasing", "inclination",
+        "_user_id", "_org_id", "_role", "_user_email",
     }
 
     cmd = [str(python), str(script)]
@@ -286,6 +304,16 @@ def run_simulation(
 
     # Set PYTHONPATH so `sim` package is importable from any cwd
     env = os.environ.copy()
+    # Read tier from job metadata
+    try:
+        meta_path = Path(output_dir) / "job.json"
+        if meta_path.exists():
+            job_meta = json.loads(meta_path.read_text())
+            env["CONSTELLATION_SIM_TIER"] = job_meta.get("role", "viewer")
+        else:
+            env["CONSTELLATION_SIM_TIER"] = "viewer"
+    except Exception:
+        env["CONSTELLATION_SIM_TIER"] = "viewer"
     existing_pp = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = (
         f"{simulator_root}:{existing_pp}" if existing_pp else simulator_root
@@ -345,3 +373,172 @@ def run_simulation(
     )
 
     return {"status": status, "files": files, "return_code": proc.returncode}
+
+
+# ── Batch sweep task ──────────────────────────────────────────────────────────
+
+def run_batch_job(
+    job_id: str,
+    simulator_root: str,
+    outputs_dir: str,
+    sweep_def: dict,
+    user_id: int,
+    tier: str,
+) -> None:
+    """
+    RQ task for parametric batch sweep.
+
+    sweep_def example:
+    {
+        "mode": "heatmap",
+        "comms": "vdes",
+        "weather": "clear",
+        "min_elev": 10.0,
+        "res": 5.0,
+        "fixed_params": {},
+        "sweep_params": [
+            {"param": "sats", "values": [12, 24, 48]},
+            {"param": "inclination", "values": [53.0, 87.0]},
+            {"param": "altitude", "values": [550.0, 600.0]}
+        ]
+    }
+    """
+    job_dir = Path(outputs_dir) / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    sps = [SweepParam(**sp) for sp in sweep_def.get("sweep_params", [])]
+    fixed = sweep_def.get("fixed_params", {})
+    sd = SweepDefinition(
+        mode=sweep_def["mode"],
+        comms=sweep_def.get("comms", "vdes"),
+        weather=sweep_def.get("weather", "clear"),
+        min_elev=sweep_def.get("min_elev", 10.0),
+        res=sweep_def.get("res", 5.0),
+        duration=sweep_def.get("duration", 3600),
+        fixed_params=fixed,
+        sweep_params=sps,
+    )
+
+    configs = sd.generate_configs()
+    total = len(configs)
+
+    if total == 0:
+        _fail_batch(job_dir, "No configurations generated from sweep params")
+        return
+    if total > 200:
+        _fail_batch(job_dir, f"Too many combinations ({total}). Max is 200.")
+        return
+
+    _update_batch_meta(job_dir, {"status": "running", "total": total, "completed": 0})
+
+    venv_python = _venv_python(simulator_root)
+    satsim_script = _satsim_script(simulator_root)
+    results = []
+
+    for idx, config in enumerate(configs):
+        if (job_dir / ".cancel").exists():
+            _update_batch_meta(job_dir, {"status": "cancelled", "completed": idx})
+            return
+
+        label = sd.label_for(config)
+        combo_dir = job_dir / str(idx)
+        combo_dir.mkdir(exist_ok=True)
+
+        cmd = [
+            str(venv_python), str(satsim_script), "--backend", "matplotlib", sd.mode,
+            f"--sats={int(config.get('sats', 66))}",
+            f"--planes={int(config.get('planes', 6))}",
+            f"--inclination={config.get('inclination', 87.4)}",
+            f"--altitude={config.get('altitude', 600.0)}",
+            f"--phasing={int(config.get('phasing', 1))}",
+            f"--comms={sd.comms}",
+            f"--weather={config.get('weather', sd.weather)}",
+            f"--min-elev={sd.min_elev}",
+            f"--res={sd.res}",
+        ]
+        if sd.mode == "heatmap-rf":
+            cmd.append("--bidi")
+        if sd.mode in {"sky", "orbit", "track", "route"}:
+            cmd.append("--save")
+        if sd.mode == "coverage":
+            cmd.append(f"--duration={sd.duration}")
+
+        result = {"label": label, "params": config, "success": False}
+        try:
+            subprocess.run(
+                cmd, cwd=str(combo_dir), timeout=3600,
+                capture_output=True, text=True, check=True,
+            )
+            csv_files = list(combo_dir.glob("heatmap_*.csv"))
+            png_files = list(combo_dir.glob("heatmap_*.png"))
+            if csv_files:
+                result["heatmap_csv"] = csv_files[0]
+            if png_files:
+                result["heatmap_png"] = png_files[0]
+            tco_files = list(combo_dir.glob("*tco*.json"))
+            if tco_files:
+                result["tco_json"] = tco_files[0]
+            result["success"] = True
+        except subprocess.TimeoutExpired:
+            result["error"] = "TIMEOUT"
+        except subprocess.CalledProcessError as e:
+            result["error"] = (e.stderr or "")[:500]
+            (combo_dir / "error.log").write_text(e.stderr or "(empty)")
+
+        results.append(result)
+        if idx % 5 == 0 or idx == total - 1:
+            _update_batch_meta(job_dir, {"completed": idx + 1})
+
+    try:
+        summary_csv = job_dir / "sweep_summary.csv"
+        generate_summary_csv(results, summary_csv)
+        summary_json = job_dir / "sweep_summary.json"
+        generate_summary_json(results, summary_json)
+        grid_png = job_dir / "sweep_heatmap_grid.png"
+        generate_heatmap_grid(results, grid_png)
+        if tier and _tier_needs_watermark(tier):
+            _apply_watermark_multiple(
+                [grid_png] + [r.get("heatmap_png") for r in results if r.get("heatmap_png")],
+                tier,
+            )
+        _update_batch_meta(job_dir, {
+            "status": "completed",
+            "completed": total,
+            "summary_csv": "sweep_summary.csv",
+            "summary_json": "sweep_summary.json",
+            "heatmap_grid": "sweep_heatmap_grid.png",
+        })
+    except Exception as e:
+        _update_batch_meta(job_dir, {"status": "failed", "error": str(e)})
+
+
+def _update_batch_meta(job_dir: Path, updates: dict) -> None:
+    """Update the batch job's meta file."""
+    meta_path = job_dir / "job.json"
+    if meta_path.exists():
+        data = json.loads(meta_path.read_text())
+        data.update(updates)
+        data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        meta_path.write_text(json.dumps(data))
+
+
+def _fail_batch(job_dir: Path, error: str) -> None:
+    """Mark a batch job as failed."""
+    _update_batch_meta(job_dir, {"status": "failed", "error": error})
+
+
+def _tier_needs_watermark(tier: str) -> bool:
+    """Check if output needs watermark."""
+    return tier in ("viewer", "free")
+
+
+def _apply_watermark_multiple(paths: list[Path], tier: str) -> None:
+    """Apply watermark to multiple PNG files."""
+    try:
+        from ..app.watermark import should_watermark, apply_watermark
+        if should_watermark(tier):
+            for p in paths:
+                if p and p.exists():
+                    apply_watermark(str(p))
+    except ImportError:
+        pass

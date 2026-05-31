@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, Literal, Union
+from typing import Any, Optional, Literal, Union
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -187,7 +187,7 @@ JobRequest = Union[HeatmapRequest, HeatmapRfRequest, SkyRequest, OrbitRequest, T
 
 class JobFile(BaseModel):
     name: str
-    type: Literal["csv", "png", "gif", "html", "txt", "log"]
+    type: Literal["csv", "png", "gif", "html", "txt", "log", "json"]
     url: str
     size_bytes: int
 
@@ -233,6 +233,45 @@ class UpdateJobMeta(BaseModel):
     tags: Optional[list[str]] = None
 
 
+
+# ── Batch sweep models ────────────────────────────────────────────────────────
+
+_VALID_PARAMS = {"sats", "planes", "inclination", "altitude", "phasing", "weather"}
+_VALID_MODES  = {"heatmap", "heatmap-rf", "coverage"}
+
+
+class SweepParamRange(BaseModel):
+    """One swept parameter dimension."""
+    param: str
+    values: list[float | str]
+
+    @field_validator("param")
+    @classmethod
+    def _check_param(cls, v: str) -> str:
+        if v not in _VALID_PARAMS:
+            raise ValueError(f"Invalid param '{v}'. Must be one of: {_VALID_PARAMS}")
+        return v
+
+
+class BatchRequest(BaseModel):
+    """Batch sweep job submission."""
+    mode: str = "heatmap"
+    comms: str = "vdes"
+    weather: str = "clear"
+    min_elev: float = 10.0
+    res: float = 5.0
+    fixed_params: dict[str, Any] = {}
+    sweep_params: list[SweepParamRange] = []
+    title: Optional[str] = None
+
+    @field_validator("mode")
+    @classmethod
+    def _check_mode(cls, v: str) -> str:
+        if v not in _VALID_MODES:
+            raise ValueError(f"Invalid mode '{v}'. Must be one of: {_VALID_MODES}")
+        return v
+
+
 # ── Options response ──────────────────────────────────────────────────────────
 
 class ConstellationPreset(BaseModel):
@@ -269,3 +308,5 @@ class OptionsResponse(BaseModel):
     backends: list[str]
     constellation_presets: dict[str, ConstellationPreset] = {}
     known_constellations: dict[str, MultiShellPreset] = {}
+    role: str = "viewer"
+    limits: dict = {}

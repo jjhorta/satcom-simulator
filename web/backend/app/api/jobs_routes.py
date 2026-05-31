@@ -16,9 +16,11 @@ from ..job_store import create_job, get_job, list_jobs, update_job
 from ..models import (
     HeatmapRequest, HeatmapRfRequest, JobListItem, JobStatus, JobRequest,
     LatencyRequest, OrbitRequest, RouteRequest, SkyRequest, TrackRequest,
+    SweepParamRange, BatchRequest,
     UpdateJobMeta,
 )
 from ..rbac import get_effective_role, has_permission, demo_is_expired
+from ..tier_config import get_limits, validate_job_params
 from ..settings_store import get_active_constellation_presets
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -61,6 +63,16 @@ async def submit_job(
         if used >= limit:
             raise HTTPException(status_code=429, detail="Demo simulation limit reached")
 
+    # Monthly job quota check
+    limits = get_limits(role)
+    monthly_limit = limits.get("jobs_per_month", 0)
+    jobs_used = user.get("jobs_used_this_month", 0)
+    if monthly_limit != -1 and jobs_used >= monthly_limit:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Monthly job limit reached ({monthly_limit}/{monthly_limit}). Upgrade or wait.",
+        )
+
     mode = payload.get("mode")
     if mode not in _DISPATCH:
         raise HTTPException(status_code=400, detail=f"Unknown mode: {mode}")
@@ -73,6 +85,11 @@ async def submit_job(
 
     job_id = str(uuid.uuid4())
     params = job_req.model_dump()
+
+    # Validate params against role limits
+    errors = validate_job_params(role, params)
+    if errors:
+        raise HTTPException(status_code=403, detail="; ".join(errors))
 
     job = create_job(settings.outputs_dir, job_id, mode, params)
 
@@ -114,6 +131,66 @@ async def submit_job(
 
     base_url = str(request.base_url).rstrip("/")
     return get_job(settings.outputs_dir, job_id, base_url)
+
+
+@router.post("/batch", response_model=JobStatus, status_code=status.HTTP_202_ACCEPTED)
+async def submit_batch_job(
+    body: BatchRequest,
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    user: dict = Depends(get_current_user),
+):
+    """Submit a parametric batch sweep job."""
+    role = get_effective_role(user)
+    if not has_permission(role, "jobs:create"):
+        raise HTTPException(status_code=403, detail="Your role does not allow creating simulations")
+
+    limits = get_limits(role)
+    max_combos = limits.get("max_sweep_combinations", 0)
+    max_batch_jobs = limits.get("max_batch_jobs_per_month", 0)
+
+    if max_combos == 0:
+        raise HTTPException(status_code=403, detail="Batch simulations not available on your plan")
+
+    total_combos = 1
+    for sp in body.sweep_params:
+        total_combos *= len(sp.values)
+    if total_combos > max_combos:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Too many combinations ({total_combos}). Max for {role}: {max_combos}",
+        )
+
+    jobs_used = user.get("batch_jobs_used_this_month", 0)
+    if max_batch_jobs != -1 and jobs_used >= max_batch_jobs:
+        raise HTTPException(status_code=429, detail="Monthly batch job limit reached")
+
+    job_id = str(uuid.uuid4())
+    params = body.model_dump()
+    params["total_combinations"] = total_combos
+    meta = create_job(settings.outputs_dir, job_id, "batch", params)
+
+    # Auto-generate tags for the batch job
+    try:
+        tags = generate_autotags("batch", body.model_dump(), {})
+        update_job(settings.outputs_dir, job_id, tags=tags)
+    except Exception:
+        pass  # tags are best-effort
+
+    queue = _get_queue(settings)
+    queue.enqueue(
+        "worker.tasks.run_batch_job",
+        args=(
+            job_id,
+            settings.simulator_root,
+            str(settings.outputs_dir),
+            body.model_dump(),
+            user["id"],
+            role,
+        ),
+        job_timeout=86400,
+    )
+    return meta
 
 
 @router.get("", response_model=list[JobListItem])
@@ -184,6 +261,32 @@ async def download_file(
     }
     media_type = media_types.get(file_path.suffix.lower(), "application/octet-stream")
     return FileResponse(str(file_path), media_type=media_type, filename=safe_name)
+
+
+@router.get("/{job_id}/combo/{combo_index}/{filename}")
+async def download_combo_file(
+    job_id: str,
+    combo_index: str,
+    filename: str,
+    settings: Settings = Depends(get_settings),
+):
+    """Serve a file from a batch sweep combo subdirectory."""
+    safe_name = Path(filename).name
+    safe_idx = Path(combo_index).name
+    file_path = settings.outputs_dir / job_id / safe_idx / safe_name
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    media_types = {
+        ".png": "image/png",
+        ".gif": "image/gif",
+        ".html": "text/html",
+        ".csv": "text/csv",
+        ".txt": "text/plain",
+        ".log": "text/plain",
+        ".json": "application/json",
+    }
+    media_type = media_types.get(file_path.suffix.lower(), "application/octet-stream")
+    return FileResponse(str(file_path), media_type=media_type, filename=f"{safe_idx}_{safe_name}")
 
 
 @router.get("/{job_id}/tco")

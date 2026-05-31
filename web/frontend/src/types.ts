@@ -14,6 +14,7 @@ export interface UserInfo {
   email:                string
   username:             string
   role:                 UserRole
+  tier?:                string
   org_id?:              number | null
   org_name?:            string | null
   is_active?:           boolean
@@ -106,7 +107,7 @@ export interface OptionsResponse {
 }
 
 // ── Job models ─────────────────────────────────────────────────────────────────
-export type JobMode = 'heatmap' | 'heatmap-rf' | 'sky' | 'orbit' | 'track' | 'route' | 'latency' | 'report'
+export type JobMode = 'heatmap' | 'heatmap-rf' | 'sky' | 'orbit' | 'track' | 'route' | 'latency' | 'batch' | 'report'
 export type JobStatusValue = 'queued' | 'running' | 'completed' | 'failed'
 
 export interface JobFile {
@@ -285,4 +286,32 @@ export interface HeatmapRow {
   longitude:        number
   availability_pct: number
   [key: string]:    number | string
+}
+
+// ── Batch Sweep Types ────────────────────────────────────────────────────────
+export interface SweepParamDef {
+  param: 'sats' | 'planes' | 'inclination' | 'altitude' | 'phasing' | 'weather';
+  values: (number | string)[];
+}
+
+export interface SweepResultEntry {
+  label: string;
+  params: Record<string, number>;
+  success: boolean;
+  metrics?: {
+    mean_coverage_pct: number;
+    max_coverage_pct: number;
+    min_coverage_pct: number;
+    coverage_above_90_pct: number;
+    coverage_above_50_pct: number;
+  };
+}
+
+export interface SweepFormState {
+  mode: 'heatmap' | 'coverage';
+  comms: string;
+  weather: string;
+  minElev: number;
+  resolution: number;
+  sweepParams: SweepParamDef[];
 }

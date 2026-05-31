@@ -36,6 +36,21 @@ def decode_token(token: str, settings: Settings) -> Optional[dict]:
         return None
 
 
+
+def decode_token_from_request(request) -> Optional[str]:
+    """Extract user email from JWT in Authorization header (for middleware)."""
+    from starlette.requests import Request
+    from .config import get_settings
+
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return None
+    token_str = auth.split(" ", 1)[1]
+    settings = get_settings()
+    payload = decode_token(token_str, settings)
+    return payload.get("sub") if payload else None
+
+
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     settings: Settings = Depends(get_settings),

@@ -139,6 +139,8 @@ export default function JobList({
   const [activeTag,   setActiveTag]   = useState<string | null>(null)
   const [sortCol,     setSortCol]     = useState<SortCol>('created_at')
   const [sortDir,     setSortDir]     = useState<SortDir>('desc')
+  const [pageSize,    setPageSize]    = useState(20)
+  const [page,        setPage]        = useState(1)
 
   const { data: jobs = [], isLoading } = useQuery({
     queryKey: ['jobs'],
@@ -165,7 +167,10 @@ export default function JobList({
 
   // Filter by active tag, then sort
   const filtered = activeTag ? jobs.filter((j) => (j.tags ?? []).includes(activeTag)) : jobs
-  const visible  = sortJobs(filtered, sortCol, sortDir)
+  const sorted  = sortJobs(filtered, sortCol, sortDir)
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
+  const safePage = Math.min(page, totalPages)
+  const visible = sorted.slice((safePage - 1) * pageSize, safePage * pageSize)
 
   if (isLoading) {
     return <p className="text-sm text-gray-500 animate-pulse">Loading jobs…</p>
@@ -245,6 +250,57 @@ export default function JobList({
           </table>
         </div>
       )}
+      {/* Pagination */}
+      <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
+        <div className="flex items-center gap-2">
+          <span>Show</span>
+          <select
+            value={pageSize}
+            onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+            className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-300 focus:outline-none focus:border-indigo-500"
+          >
+            <option value={10}>10</option>
+            <option value={20}>20</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+          <span>of {sorted.length} jobs</span>
+        </div>
+        {totalPages > 1 && (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={safePage <= 1}
+              className="px-2 py-1 rounded hover:bg-gray-800 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+            >
+              ‹ Prev
+            </button>
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              const start = Math.max(1, Math.min(safePage - 2, totalPages - 4))
+              const p = start + i
+              if (p > totalPages) return null
+              return (
+                <button
+                  key={p}
+                  onClick={() => setPage(p)}
+                  className={`px-2 py-1 rounded transition-colors ${
+                    p === safePage ? 'bg-indigo-600 text-white' : 'hover:bg-gray-800 text-gray-400'
+                  }`}
+                >
+                  {p}
+                </button>
+              )
+            })}
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safePage >= totalPages}
+              className="px-2 py-1 rounded hover:bg-gray-800 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+            >
+              Next ›
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

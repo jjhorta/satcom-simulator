@@ -11,6 +11,7 @@ interface AuthState {
   role:     UserRole | null
   orgId:    number | null
   orgName:  string | null
+  tier:     string
   // Actions
   setToken: (t: string) => void
   setUser:  (u: UserInfo) => void
@@ -27,6 +28,7 @@ export const useAuthStore = create<AuthState>()(
       role:     null,
       orgId:    null,
       orgName:  null,
+      tier:     'free',
 
       setToken: (t) => set({ token: t }),
 
@@ -37,6 +39,7 @@ export const useAuthStore = create<AuthState>()(
         role:     u.role,
         orgId:    u.org_id ?? null,
         orgName:  u.org_name ?? null,
+        tier:     u.tier || (u.role === 'admin' ? 'enterprise' : u.role === 'demo' ? 'demo' : u.role === 'creator' ? 'pro' : 'free'),
       }),
 
       logout: () => set({

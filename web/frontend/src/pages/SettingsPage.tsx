@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Satellite, RotateCcw, Save, ChevronDown, ChevronRight, Plus, Trash2, Sparkles, Brain, ShieldCheck, Pencil, Check, X as XIcon, Share2, Lock } from 'lucide-react'
+import { ArrowLeft, Satellite, RotateCcw, Save, ChevronDown, ChevronRight, Plus, Trash2, Sparkles, Brain, ShieldCheck, Pencil, Check, X as XIcon, Share2, Lock, Bot } from 'lucide-react'
 import { useAiStore, isAiConfigured } from '../store/aiStore'
-import { getSimSettings, updateSimSettings, resetCommsTech, resetWeather, getRoutes, updateRoute, resetRoute, getTcoSettings, resetTcoSettings, getConstellationPresets, saveConstellationPreset, deleteConstellationPreset, resetConstellationPresets, getMultiShellGroups, saveMultiShellGroup, updateMultiShellGroup, deleteMultiShellGroup, resetMultiShellGroups, fetchAiConfig, updateAiConfig, getShareSettings, updateShareSettings } from '../api/client'
+import { getSimSettings, updateSimSettings, resetCommsTech, resetWeather, getRoutes, updateRoute, resetRoute, getTcoSettings, resetTcoSettings, getConstellationPresets, saveConstellationPreset, deleteConstellationPreset, resetConstellationPresets, getMultiShellGroups, saveMultiShellGroup, updateMultiShellGroup, deleteMultiShellGroup, resetMultiShellGroups, fetchAiConfig, updateAiConfig, getShareSettings, updateShareSettings, getCarlConfig, updateCarlConfig } from '../api/client'
 import type { ConstellationPreset, ShellDef, MultiShellGroupRecord } from '../types'
 import 'leaflet/dist/leaflet.css'
 import { MapContainer, TileLayer, Polyline, useMap } from 'react-leaflet'
@@ -1658,6 +1658,9 @@ export default function SettingsPage() {
                 </div>
               </div>
 
+              {/* ── CARL Configuration ── */}
+              <CarlConfigSection />
+
               {/* ── Report Sharing ── */}
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4 mt-2">
                 <div className="flex items-center gap-2">
@@ -1715,6 +1718,134 @@ export default function SettingsPage() {
           )}
 
         </div>
+      </div>
+    </div>
+  )
+}
+// ── CARL Configuration Section ───────────────────────────────────────────
+
+function CarlConfigSection() {
+  const [config, setConfig] = useState<Record<string, unknown> | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [persona, setPersona] = useState('')
+  const [temperature, setTemperature] = useState(0.5)
+  const [maxTools, setMaxTools] = useState(5)
+  const [tools, setTools] = useState<Record<string, boolean>>({})
+  const [carlName, setCarlName] = useState('CARL')
+
+  const TOOL_LABELS: Record<string, string> = {
+    submit_simulation: 'Submit simulations',
+    submit_batch_sweep: 'Batch sweep',
+    get_job_status: 'Query job results',
+    read_csv_data: 'Read CSV/GeoJSON files',
+    get_simulation_options: 'List simulation options',
+    upload_file: 'Upload files for analysis',
+  }
+
+  useEffect(() => {
+    getCarlConfig().then((cfg) => {
+      setConfig(cfg)
+      setCarlName(cfg.name || 'CARL')
+      setPersona(cfg.persona || '')
+      setTemperature(cfg.temperature ?? 0.5)
+      setMaxTools(cfg.max_tools_per_turn ?? 5)
+      setTools(cfg.tools || {})
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [])
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await updateCarlConfig({ name: carlName, persona, temperature, max_tools_per_turn: maxTools, tools })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch { setSaved(false) }
+    setSaving(false)
+  }
+
+  const restoreDefaults = () => {
+    setCarlName('CARL')
+    setPersona("You are CARL (Constellation AI Reasoning Layer), an AI constellation engineer inspired by Carl Sagan. You make complex orbital mechanics accessible and exciting. You have direct access to the Constellation Simulator API. Create simulations, analyze results, and iterate on designs. Explain your reasoning in clear, vivid terms. Always use metric units (km, degrees, dB). Be technical but not dry.")
+    setTemperature(0.5)
+    setMaxTools(5)
+    setTools({
+      submit_simulation: true, submit_batch_sweep: true, get_job_status: true,
+      read_csv_data: true, get_simulation_options: true, upload_file: true,
+    })
+  }
+
+  if (loading) return <div className="text-gray-400 text-sm p-4">Loading CARL config...</div>
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Bot className="w-4 h-4 text-indigo-400" />
+        <p className="text-sm font-medium text-white">CARL — Constellation AI Reasoning Layer</p>
+      </div>
+      <p className="text-xs text-gray-500">
+        Configure CARL's personality, capabilities (tools), and creativity. These settings affect how
+        CARL responds and which actions it can perform. Changes take effect immediately.
+      </p>
+
+      {/* Name & Temperature */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-400">Name</label>
+          <input value={carlName} onChange={e => setCarlName(e.target.value)}
+            className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-400">Temperature (0.0–1.0)</label>
+          <input type="number" min={0} max={1} step={0.1} value={temperature}
+            onChange={e => setTemperature(parseFloat(e.target.value) || 0.5)}
+            className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-400">Max tools per turn</label>
+          <input type="number" min={1} max={20} step={1} value={maxTools}
+            onChange={e => setMaxTools(parseInt(e.target.value) || 5)}
+            className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500" />
+        </div>
+      </div>
+
+      {/* Persona */}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-gray-400">Persona (System Prompt)</label>
+          <button onClick={restoreDefaults}
+            className="text-xs text-gray-500 hover:text-gray-300 underline">Restore default</button>
+        </div>
+        <textarea value={persona} onChange={e => setPersona(e.target.value)} rows={6}
+          className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-xs text-white
+                     focus:outline-none focus:border-indigo-500 font-mono leading-relaxed resize-y" />
+      </div>
+
+      {/* Tools */}
+      <div className="space-y-2">
+        <label className="text-xs font-medium text-gray-400">Capabilities (tools CARL can use)</label>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+          {Object.entries(TOOL_LABELS).map(([key, label]) => (
+            <label key={key} className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={tools[key] ?? true}
+                onChange={e => setTools({ ...tools, [key]: e.target.checked })}
+                className="accent-indigo-500" />
+              <span className="text-sm text-gray-300">{label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Save */}
+      <div className="flex items-center gap-3 pt-1 border-t border-gray-800">
+        <button onClick={handleSave} disabled={saving}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium
+                     bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors">
+          <Save className="w-3.5 h-3.5" />
+          {saving ? 'Saving...' : saved ? 'Saved ✓' : 'Save CARL Config'}
+        </button>
       </div>
     </div>
   )

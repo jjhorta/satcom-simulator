@@ -102,5 +102,13 @@ def run_route_analysis(args):
     print(f"  Maximum Connectivity:   {max_connectivity:.1f}%")
     if worst:
         print(f"  Worst Coverage Point:   {worst['waypoint']} ({worst['connectivity_pct']:.1f}%)")
+
+    # ── GeoJSON + QGIS style export ───────────────────────────────────────
+    geojson_filename = f"route_{route_name}_{args.comms}_{walker_suffix}.geojson"
+    from ..exports.geojson import write_route_geojson
+    from ..exports.qml import write_qml
+    write_route_geojson(results, geojson_filename, route_name)
+    write_qml(geojson_filename, "route")
+
     print(f"\n💾 Results saved to: {csv_filename}")
     print("="*80 + "\n")

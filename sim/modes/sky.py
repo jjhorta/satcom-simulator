@@ -343,4 +343,27 @@ def run_coverage(args):
 
         print(f"✅ {loc_name}: {result['connectivity_pct']:.1f}% connectivity")
 
+
+    # ── GeoJSON + QGIS style export ───────────────────────────────────────
+    geojson_filename = f"coverage_{csv_suffix}_{args.comms}_{walker_suffix}.geojson"
+    from ..exports.geojson import write_coverage_geojson
+    from ..exports.qml import write_qml
+    # Reconstruct results list (view_sky returns one at a time)
+    if 'locations_to_test' in dir():
+        coverage_results = []
+        # Results were printed line by line; we need to rebuild from the appended CSV
+        # Parse the CSV we just wrote
+        import csv as _csv
+        with open(csv_filename, 'r') as _f:
+            _reader = _csv.DictReader(_f)
+            for _row in _reader:
+                coverage_results.append({
+                    'location': _row['location'],
+                    'latitude': float(_row['latitude']),
+                    'longitude': float(_row['longitude']),
+                    'connectivity_pct': float(_row['connectivity_pct']),
+                })
+        write_coverage_geojson(coverage_results, geojson_filename, csv_suffix)
+        write_qml(geojson_filename, "coverage")
+
     print(f"\n🎉 Coverage analysis complete! Results saved to: {csv_filename}")

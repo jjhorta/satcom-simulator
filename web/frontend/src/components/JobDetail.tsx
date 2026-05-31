@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getJob, fileUrl, updateJobMeta } from '../api/client'
+import { apiBase, getJob, fileUrl, updateJobMeta } from '../api/client'
 import type { JobFile } from '../types'
+import { useAuthStore } from '../store/authStore'
 import { X, FileText, Image, Code2, Table2, Pencil, Check, Maximize2, Minimize2, BarChart2, Sparkles, Globe } from 'lucide-react'
 import HeatmapViewer from './viewers/HeatmapViewer'
 import RouteViewer from './viewers/RouteViewer'
@@ -10,6 +11,7 @@ import TextViewer from './viewers/TextViewer'
 import OrbitViewer3D from './viewers/OrbitViewer3D'
 import TcoDashboardModal from './viewers/TcoDashboardModal'
 import AiAnalysisModal from './viewers/AiAnalysisModal'
+import BatchResultViewer from './BatchResultViewer'
 import { useAiStore, isAiConfigured } from '../store/aiStore'
 
 // ── File type → viewer ─────────────────────────────────────────────────────────
@@ -313,8 +315,16 @@ export default function JobDetail({
         </section>
       )}
 
-      {/* ── Output files ────────────────────────────────────────────────────── */}
-      {outputFiles.length > 0 && (
+      {/* ── Output files (or batch dashboard) ──────────────────────────── */}
+      {job.mode === 'batch' ? (
+        <BatchResultViewer
+          jobId={job.job_id}
+          apiBase={apiBase}
+          summaryUrl={fileUrl(job.job_id, 'sweep_summary.json')}
+          gridUrl={fileUrl(job.job_id, 'sweep_heatmap_grid.png')}
+          token={useAuthStore.getState().token || ''}
+        />
+      ) : outputFiles.length > 0 && (
         <section className="space-y-4">
           <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider">Output files</h4>
           <FileTabs jobId={jobId} files={outputFiles} />

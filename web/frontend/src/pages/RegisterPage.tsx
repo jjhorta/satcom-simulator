@@ -7,7 +7,7 @@ export default function RegisterPage() {
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
   const [orgName,  setOrgName]  = useState('')
-  const [role,     setRole]     = useState<'creator' | 'demo'>('creator')
+  // role defaults to 'demo' (all new registrations)
   const [error,    setError]    = useState('')
   const [loading,  setLoading]  = useState(false)
   const { setToken, setUser } = useAuthStore()
@@ -77,20 +77,14 @@ export default function RegisterPage() {
               placeholder="My Team" />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Account type</label>
-            <div className="grid grid-cols-2 gap-2">
-              {(['creator', 'demo'] as const).map((r) => (
-                <button key={r} type="button" onClick={() => setRole(r)}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                    role === r
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'
-                  }`}>
-                  {r === 'creator' ? 'Full access' : 'Demo (14 days)'}
-                </button>
-              ))}
-            </div>
+          <div className="bg-indigo-950/30 border border-indigo-800/40 rounded-lg p-3">
+            <p className="text-xs text-indigo-300 leading-relaxed">
+              🚀 All new accounts start as <strong>Demo (14 days)</strong> — 
+              10 simulations, full features, no credit card required.
+            </p>
+            <p className="text-xs text-indigo-400/50 mt-1">
+              Upgrade to Pro or Enterprise at any time from the Billing page.
+            </p>
           </div>
 
           {error && (

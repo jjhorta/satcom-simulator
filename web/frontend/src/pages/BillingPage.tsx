@@ -71,7 +71,7 @@ const PLANS: Plan[] = [
   {
     id: 'pro',
     name: 'Pro',
-    tagline: 'For serious constellation designers',
+    tagline: 'Upgrade from Demo — unlock everything',
     price: '€299',
     period: '/month',
     annualPrice: '€2,990',
@@ -130,7 +130,9 @@ const PLANS: Plan[] = [
 // ── Component ───────────────────────────────────────────────────────────────
 
 export default function BillingPage() {
-  const { tier, role, orgName } = useAuthStore()
+  const auth = useAuthStore()
+  const tier = auth.tier
+  const role = auth.role
   const [subscription, setSubscription] = useState<any>(null)
   const [annual, setAnnual] = useState(false)
   const [promoCode, setPromoCode] = useState('')
@@ -191,7 +193,7 @@ export default function BillingPage() {
             <div>
               <h1 className="text-2xl font-bold">Billing & Plan</h1>
               <p className="text-gray-400 mt-1">
-                {orgName || 'Personal'} · <RoleBadge role={role} /> · <TierBadge tier={tier} />
+                {auth.orgName ?? auth.email?.split('@')[0] ?? 'Team'} · <RoleBadge role={auth.role ?? 'viewer'} /> · <TierBadge tier={auth.tier ?? 'free'} />
               </p>
             </div>
             {isSubscribed && (

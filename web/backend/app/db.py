@@ -42,7 +42,10 @@ def init_db(outputs_dir: Path) -> None:
                 owner_id            INTEGER NOT NULL,
                 max_members         INTEGER DEFAULT 20,
                 stripe_customer_id  TEXT    UNIQUE,
+                stripe_subscription_id TEXT,
                 subscription_tier   TEXT    DEFAULT 'free',
+                subscription_status TEXT    DEFAULT 'inactive',
+                subscription_updated_at TEXT,
                 created_at          TEXT    NOT NULL DEFAULT (datetime('now'))
             );
 
@@ -92,6 +95,27 @@ def init_db(outputs_dir: Path) -> None:
             CREATE INDEX IF NOT EXISTS idx_users_org       ON users(org_id);
             CREATE INDEX IF NOT EXISTS idx_inv_token       ON invitations(token);
             CREATE INDEX IF NOT EXISTS idx_inv_email       ON invitations(email);
+
+            CREATE TABLE IF NOT EXISTS stripe_events (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                stripe_event_id TEXT    UNIQUE NOT NULL,
+                event_type      TEXT    NOT NULL,
+                data            TEXT,
+                processed_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS org_usage (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                org_id              INTEGER NOT NULL,
+                month               TEXT    NOT NULL,
+                jobs_used           INTEGER DEFAULT 0,
+                ai_analyses_used    INTEGER DEFAULT 0,
+                storage_bytes       INTEGER DEFAULT 0,
+                FOREIGN KEY (org_id) REFERENCES organizations(id),
+                UNIQUE(org_id, month)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_stripe_events_id ON stripe_events(stripe_event_id);
         """)
         conn.commit()
     finally:
@@ -387,3 +411,52 @@ def accept_invitation(outputs_dir: Path, token: str, user_id: int) -> Optional[d
     finally:
         conn.close()
     return inv
+
+
+# ── Stripe event helpers ──────────────────────────────────────────────────
+
+def mark_stripe_event(outputs_dir: Path, event_id: str, event_type: str, data: str = "") -> bool:
+    """Idempotent Stripe event processing. Returns True if new, False if duplicate."""
+    conn = _connect(outputs_dir)
+    try:
+        conn.execute(
+            "INSERT INTO stripe_events (stripe_event_id, event_type, data) VALUES (?, ?, ?)",
+            (event_id, event_type, data),
+        )
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+
+# ── Org usage helpers ─────────────────────────────────────────────────────
+
+def increment_org_job_count(outputs_dir: Path, org_id: int) -> None:
+    """Increment the monthly job counter for an organization."""
+    conn = _connect(outputs_dir)
+    now = datetime.now(timezone.utc)
+    month = now.strftime("%Y-%m")
+    conn.execute(
+        """INSERT INTO org_usage (org_id, month, jobs_used)
+           VALUES (?, ?, 1)
+           ON CONFLICT(org_id, month) DO UPDATE SET
+               jobs_used = jobs_used + 1""",
+        (org_id, month),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_org_job_count(outputs_dir: Path, org_id: int) -> int:
+    """Get current month's job count for an organization."""
+    conn = _connect(outputs_dir)
+    now = datetime.now(timezone.utc)
+    month = now.strftime("%Y-%m")
+    row = conn.execute(
+        "SELECT jobs_used FROM org_usage WHERE org_id = ? AND month = ?",
+        (org_id, month),
+    ).fetchone()
+    conn.close()
+    return row[0] if row else 0

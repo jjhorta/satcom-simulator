@@ -29,7 +29,7 @@ def _ext_to_type(name: str) -> str:
     ext = Path(name).suffix.lower().lstrip(".")
     if ext == "log":
         return "log"
-    return ext if ext in ("csv", "png", "gif", "html", "txt") else "txt"
+    return ext if ext in ("csv", "png", "gif", "html", "txt", "json") else "txt"
 
 
 def create_job(outputs_dir: Path, job_id: str, mode: str, params: dict) -> JobStatus:
@@ -69,7 +69,7 @@ def get_job(outputs_dir: Path, job_id: str, base_url: str = "") -> Optional[JobS
     log_tail: Optional[str] = None
 
     for f in sorted(job_dir.iterdir()):
-        if f.name == "job.json":
+        if f.name == "job.json" or not f.is_file():
             continue
         ftype = _ext_to_type(f.name)
         files.append(JobFile(

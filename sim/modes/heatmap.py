@@ -149,3 +149,9 @@ def run_heatmap(args):
     title = f"Coverage Heatmap | {COMMS_PAYLOADS[args.comms]['desc']} | {walker_suffix}"
     save_heatmap_plot(lat_grid, lon_grid, coverage_grid, img_filename, title,
                       COMMS_PAYLOADS[args.comms]['desc'])
+    # ── GeoJSON + QGIS style export ───────────────────────────────────────
+    geojson_filename = f"heatmap_{args.comms}_{walker_suffix}.geojson"
+    from ..exports.geojson import write_heatmap_geojson
+    from ..exports.qml import write_qml
+    write_heatmap_geojson(lat_grid, lon_grid, coverage_grid, geojson_filename, title, args.res)
+    write_qml(geojson_filename, "heatmap")

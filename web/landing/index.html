@@ -577,7 +577,174 @@
       .hero-stats { gap: 1.5rem; }
       .btn-primary, .btn-secondary { padding: 0.75rem 1.5rem; font-size: 0.9rem; }
     }
-  </style>
+  
+/* ── CARL feature card ──────────────────────────────────────────── */
+.carl-card {
+    background: linear-gradient(135deg, rgba(15, 15, 40, 0.95), rgba(20, 10, 50, 0.95));
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: 20px;
+    padding: 2rem;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: transform 0.4s, border-color 0.4s, box-shadow 0.4s;
+    position: relative;
+    overflow: hidden;
+    grid-column: 1 / -1;
+    max-width: 100%;
+}
+.carl-card::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    background: linear-gradient(90deg, #8b5cf6, #06b6d4, #8b5cf6);
+    background-size: 200% 100%;
+    animation: carl-border 4s linear infinite;
+    opacity: 1;
+}
+@keyframes carl-border {
+    0% { background-position: 0% 0%; }
+    100% { background-position: 200% 0%; }
+}
+.carl-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 30% 50%, rgba(139, 92, 246, 0.06), transparent 70%);
+    pointer-events: none;
+}
+.carl-card:hover {
+    border-color: rgba(139, 92, 246, 0.6);
+    transform: translateY(-6px);
+    box-shadow: 0 25px 70px rgba(0,0,0,0.6), 0 0 50px rgba(139, 92, 246, 0.1);
+}
+.carl-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+    position: relative;
+    z-index: 1;
+}
+.carl-header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.carl-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #8b5cf6, #06b6d4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    flex-shrink: 0;
+}
+.carl-name {
+    font-size: 1.15rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #c4b5fd, #22d3ee);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.carl-subtitle {
+    font-size: 0.72rem;
+    color: rgba(148, 163, 184, 0.7);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    position: relative;
+    z-index: 1;
+}
+.carl-quote {
+    font-style: italic;
+    font-size: 0.85rem;
+    color: rgba(148, 163, 184, 0.55);
+    border-left: 2px solid rgba(139, 92, 246, 0.3);
+    padding-left: 0.75rem;
+    margin: 0.75rem 0;
+    position: relative;
+    z-index: 1;
+}
+.carl-desc {
+    font-size: 0.88rem;
+    color: rgba(203, 213, 225, 0.85);
+    line-height: 1.6;
+    margin-bottom: 0.75rem;
+    position: relative;
+    z-index: 1;
+}
+.carl-features {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.35rem;
+    margin: 0.75rem 0;
+    position: relative;
+    z-index: 1;
+}
+.carl-feature {
+    font-size: 0.78rem;
+    color: rgba(148, 163, 184, 0.75);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.carl-feature::before {
+    content: '✦';
+    color: rgba(139, 92, 246, 0.6);
+    font-size: 0.6rem;
+}
+.carl-footer {
+    font-size: 0.78rem;
+    color: rgba(148, 163, 184, 0.4);
+    font-style: italic;
+    margin-top: 0.25rem;
+    position: relative;
+    z-index: 1;
+}
+.carl-stars {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 0;
+}
+.carl-star {
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #fff;
+    border-radius: 50%;
+    opacity: 0;
+    animation: twinkle 4s ease-in-out infinite;
+}
+.carl-star:nth-child(1) { top: 10%; left: 15%; animation-delay: 0s; }
+.carl-star:nth-child(2) { top: 25%; left: 80%; animation-delay: 1.2s; width: 1.5px; height: 1.5px; }
+.carl-star:nth-child(3) { top: 50%; left: 40%; animation-delay: 2.5s; }
+.carl-star:nth-child(4) { top: 70%; left: 70%; animation-delay: 0.8s; width: 1px; height: 1px; }
+.carl-star:nth-child(5) { top: 85%; left: 20%; animation-delay: 3.2s; width: 1.5px; height: 1.5px; }
+.carl-star:nth-child(6) { top: 40%; left: 90%; animation-delay: 1.8s; }
+.carl-star:nth-child(7) { top: 15%; left: 55%; animation-delay: 0.4s; width: 1px; height: 1px; }
+.carl-star:nth-child(8) { top: 60%; left: 10%; animation-delay: 2.1s; }
+@keyframes twinkle {
+    0%, 100% { opacity: 0; transform: scale(0.5); }
+    50% { opacity: 0.7; transform: scale(1); }
+}
+
+</style>
+  <script>
+(function() {
+  if (localStorage.getItem('consent-analytics') === 'accepted') {
+    (function(c,l,a,r,i,t,y){
+      c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+      t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+      y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window, document, "clarity", "script", "wwc9bke5iv");
+  }
+})();
+</script>
 </head>
 <body>
 
@@ -608,7 +775,7 @@
   <div class="container">
     <div class="hero-inner">
       <div class="hero-badge">
-        <span class="badge">🚀 &nbsp;AI-Powered Satellite Analysis Platform</span>
+        <span class="badge">🧠 &nbsp;CARL AI-Powered Constellation Analysis Platform</span>
       </div>
 
       <h1 class="hero-title">
@@ -637,7 +804,7 @@
           <div class="stat-lbl">Real Constellations</div>
         </div>
         <div class="stat">
-          <div class="stat-val">AIS&thinsp;/&thinsp;VDES</div>
+          <div class="stat-val">Multi-Band&thinsp;RF</div>
           <div class="stat-lbl">Protocol Simulation</div>
         </div>
         <div class="stat">
@@ -659,22 +826,58 @@
     </div>
 
     <div class="features-grid">
-      <div class="feature-card reveal">
+      
+<div class="carl-card reveal">
+        <div class="carl-stars">
+          <div class="carl-star"></div>
+          <div class="carl-star"></div>
+          <div class="carl-star"></div>
+          <div class="carl-star"></div>
+          <div class="carl-star"></div>
+          <div class="carl-star"></div>
+          <div class="carl-star"></div>
+          <div class="carl-star"></div>
+        </div>
+        <div class="carl-header">
+          <div class="carl-header-left">
+            <div class="carl-icon">🧠</div>
+            <div>
+              <div class="carl-name">CARL</div>
+              <div class="carl-subtitle">Constellation AI Reasoning Layer</div>
+            </div>
+          </div>
+        </div>
+        <div class="carl-quote">
+          “Somewhere, something incredible is waiting to be known.” — Carl Sagan
+        </div>
+        <p class="carl-desc">
+          Describe your mission in plain language and <strong>CARL</strong> will design the constellation.
+          Not just a chatbot — an <strong>AI constellation engineer</strong> with direct access to the simulator.
+          He runs real simulations, analyzes results, and iterates on designs conversationally.
+          All you do is <strong>ask</strong>.
+        </p>
+        <div class="carl-features">
+          <span class="carl-feature">Run heatmaps &amp; RF link budgets</span>
+          <span class="carl-feature">Parametric sweeps</span>
+          <span class="carl-feature">Latency analysis (fiber vs satellite)</span>
+          <span class="carl-feature">CSV / GeoJSON instant analysis</span>
+        </div>
+        <div class="carl-footer">
+          Inspired by Carl Sagan · Available on Pro and Enterprise plans
+        </div>
+      </div>
+<div class="feature-card reveal">
         <div class="feature-icon ic-blue">🛰️</div>
         <h3 class="feature-title">Physics-Based Orbital Engine</h3>
         <p class="feature-desc">Walker Delta/Star geometries, inclination sweep, and Keplerian propagation. Accurate coverage maps over maritime corridors, Arctic routes, and polar regions.</p>
       </div>
 
-      <div class="feature-card reveal">
-        <div class="feature-icon ic-purple">🤖</div>
-        <h3 class="feature-title">AI-Powered Insights</h3>
-        <p class="feature-desc">Copilot-style assistant interprets simulation outputs, flags coverage gaps and link bottlenecks, and recommends constellation geometry improvements in plain language.</p>
-      </div>
+      
 
       <div class="feature-card reveal">
         <div class="feature-icon ic-cyan">📡</div>
         <h3 class="feature-title">RF Link Budget Analysis</h3>
-        <p class="feature-desc">Full AIS/VDES link budget with MCS selection, SNR thresholds, Doppler modelling, and digital-cliff detection — per orbital pass, per vessel location.</p>
+        <p class="feature-desc">Full multi-band link budget — AIS, VDES, MSS, Starlink Ku, LTE, 5G, GSM — with MCS selection, SNR thresholds, Doppler modelling, and link margin per orbital pass and per ground location.</p>
       </div>
 
       <div class="feature-card reveal">
@@ -710,11 +913,11 @@
     <div class="cases-grid">
       <div class="case-card reveal">
         <span class="case-tag tag-maritime">Maritime</span>
-        <h3 class="case-title">Global AIS / VDES Ship Tracking</h3>
-        <p class="case-desc">Analyse coverage gaps over the North Atlantic, Trans-Pacific, and Arctic routes. Model AIS reception probability and VDES throughput-per-pass to validate commercial service eligibility before hardware investment.</p>
+        <h3 class="case-title">Global Maritime & IoT Connectivity</h3>
+        <p class="case-desc">Analyse coverage gaps over any route — maritime, Arctic, or terrestrial. Model RF link budgets for AIS, VDES, MSS, Starlink Ku, LTE, 5G, and GSM to validate service eligibility across any frequency band before hardware investment.</p>
         <div class="case-metrics">
           <span class="metric"><span class="metric-dot"></span>7 pre-configured routes</span>
-          <span class="metric"><span class="metric-dot"></span>AIS + VDES protocols</span>
+          <span class="metric"><span class="metric-dot"></span>AIS · VDES · MSS · Ku · LTE · 5G · GSM</span>
           <span class="metric"><span class="metric-dot"></span>Coastal &amp; deep ocean</span>
         </div>
       </div>
@@ -733,7 +936,7 @@
       <div class="case-card reveal">
         <span class="case-tag tag-iot">IoT / NewSpace</span>
         <h3 class="case-title">5G NB-IoT &amp; D2D Constellation Design</h3>
-        <p class="case-desc">Evaluate NB-IoT link margins and direct-to-device connectivity. MSS D2D feasibility scoring per orbital pass, with benchmarks from Sateliot, LusoSpace, and Orbcomm OG2 programs included out of the box.</p>
+        <p class="case-desc">Evaluate NB-IoT link margins and direct-to-device connectivity. MSS D2D feasibility scoring per orbital pass, with benchmarks from Sateliot, ConstellaSim, and Orbcomm OG2 programs included out of the box.</p>
         <div class="case-metrics">
           <span class="metric"><span class="metric-dot"></span>NB-IoT link analysis</span>
           <span class="metric"><span class="metric-dot"></span>D2D MSS eligibility</span>
@@ -776,7 +979,7 @@
       </div>
       <div class="constellation-card reveal">
         <div class="constellation-icon">🛸</div>
-        <div class="constellation-name">LusoSpace AIS</div>
+        <div class="constellation-name">ConstellaSim AIS</div>
         <div class="constellation-detail">12 sats · 8U nano · €15M TCO</div>
       </div>
       <div class="constellation-card reveal">
@@ -801,7 +1004,7 @@
           <li><span class="tco-check">✦</span> OPEX modelling: staffing, insurance, and replacement launch cadence</li>
           <li><span class="tco-check">✦</span> Rideshare vs. dedicated launch trade-off calculator</li>
           <li><span class="tco-check">✦</span> Nanosat to microsat platform cost comparison</li>
-          <li><span class="tco-check">✦</span> Validated against LusoSpace, Sateliot, and Orbcomm benchmarks</li>
+          <li><span class="tco-check">✦</span> Validated against ConstellaSim, Sateliot, and Orbcomm benchmarks</li>
         </ul>
       </div>
 
@@ -838,7 +1041,7 @@
           </div>
         </div>
         <p class="tco-note">
-          Calibrated against LusoSpace AIS/VDES program (€15M reported investment).
+          Calibrated against ConstellaSim AIS/VDES program (€15M reported investment).
           Model accuracy: ±10% vs. real-world benchmarks.
         </p>
       </div>
@@ -879,7 +1082,7 @@
         <p class="plan-desc">For aerospace engineers and NewSpace startups designing operational systems.</p>
         <ul class="plan-features">
           <li><span class="ck">✓</span> Unlimited configurations</li>
-          <li><span class="ck">✓</span> AIS + VDES RF link analysis</li>
+          <li><span class="ck">✓</span> Multi-band RF link analysis (AIS, VDES, MSS, Ku, LTE, 5G, GSM)</li>
           <li><span class="ck">✓</span> 15-year TCO modelling</li>
           <li><span class="ck">✓</span> AI insights assistant</li>
           <li><span class="ck">✓</span> Batch simulation engine</li>
@@ -935,7 +1138,9 @@
       <div class="footer-links">
         <a href="#features">Features</a>
         <a href="#pricing">Pricing</a>
-        <a href="mailto:contact@constellasim.com">Contact</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+        <a href="mailto:admin@constellation.com">Contact</a>
         <a href="/constellation-simulator/login">Login</a>
       </div>
     </div>

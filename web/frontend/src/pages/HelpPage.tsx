@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BookOpen, Satellite, Radio, Globe, BarChart2, Map, Navigation, HelpCircle, ArrowLeft, Signal } from 'lucide-react'
 
@@ -393,8 +394,117 @@ export default function HelpPage() {
           <li>Give simulations a title after they finish so you can compare results later.</li>
         </ul>
       </Section>
+
+      {/* Contact / Support */}
+      <Section icon={HelpCircle} title="Contact & Support">
+        <div className="space-y-3">
+          <p className="text-sm">
+            Send us a message directly from here. We'll reply to the email you provide.
+          </p>
+
+          <ContactForm />
+
+          <p className="text-xs text-gray-500">
+            Or email us directly at{' '}
+            <a href="mailto:admin@constellation.com" className="text-indigo-400 hover:text-indigo-300 underline">
+              admin@constellation.com
+            </a>
+          </p>
+        </div>
+
+      </Section>
         </div>
       </div>
     </div>
+  )
+}
+
+// ── Contact Form ──────────────────────────────────────────────────────────────
+const API_BASE = import.meta.env.BASE_URL?.replace(/\/$/, '') + '/api'
+
+function ContactForm() {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [subject, setSubject] = useState('')
+  const [message, setMessage] = useState('')
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setStatus('sending')
+    setError('')
+    try {
+      const res = await fetch(`${API_BASE}/contact/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, subject, message }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.detail?.[0]?.msg || err.detail || 'Failed to send')
+      }
+      setStatus('sent')
+      setName(''); setEmail(''); setSubject(''); setMessage('')
+    } catch (e: unknown) {
+      setStatus('error')
+      setError(e instanceof Error ? e.message : 'Connection failed')
+    }
+  }
+
+  if (status === 'sent') {
+    return (
+      <div className="bg-emerald-950/40 border border-emerald-800/50 rounded-lg p-4 text-center">
+        <p className="text-emerald-400 text-sm font-medium">✓ Message sent successfully!</p>
+        <p className="text-gray-500 text-xs mt-1">We'll get back to you shortly.</p>
+        <button onClick={() => setStatus('idle')}
+          className="text-xs text-indigo-400 hover:text-indigo-300 mt-2 underline">
+          Send another message
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">Your name *</label>
+          <input type="text" value={name} onChange={e => setName(e.target.value)} required
+            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white
+                       focus:outline-none focus:border-indigo-500 placeholder-gray-600"
+            placeholder="John Doe" />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">Your email *</label>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
+            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white
+                       focus:outline-none focus:border-indigo-500 placeholder-gray-600"
+            placeholder="you@example.com" />
+        </div>
+      </div>
+      <div>
+        <label className="text-xs text-gray-500 block mb-1">Subject</label>
+        <input type="text" value={subject} onChange={e => setSubject(e.target.value)}
+          className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white
+                     focus:outline-none focus:border-indigo-500 placeholder-gray-600"
+          placeholder="e.g. Billing question, Feature request..." />
+      </div>
+      <div>
+        <label className="text-xs text-gray-500 block mb-1">Message *</label>
+        <textarea value={message} onChange={e => setMessage(e.target.value)} required rows={4}
+          className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white
+                     focus:outline-none focus:border-indigo-500 placeholder-gray-600 resize-y"
+          placeholder="Describe your question or issue..." />
+      </div>
+      {status === 'error' && (
+        <p className="text-red-400 text-xs">❌ {error}</p>
+      )}
+      <button type="submit" disabled={status === 'sending'}
+        className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500
+                   text-white text-sm px-5 py-2 rounded-lg transition-colors">
+        {status === 'sending' ? 'Sending...' : 'Send Message'}
+      </button>
+    </form>
   )
 }

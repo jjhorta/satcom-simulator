@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { LogOut, Satellite, HelpCircle, Settings, ShieldAlert, Users } from 'lucide-react'
+import { LogOut, Satellite, HelpCircle, Settings, ShieldAlert, Users, CreditCard, Sparkles, Bot } from 'lucide-react'
 import { useAuthStore }  from '../store/authStore'
 import { useReportStore } from '../store/reportStore'
 import { useAiStore }    from '../store/aiStore'
@@ -74,6 +74,21 @@ export default function DashboardPage() {
               Team
             </Link>
           )}
+          <Link to="/billing"
+            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors">
+            <CreditCard className="w-4 h-4" />
+            Billing
+          </Link>
+          <Link to="/batch"
+            className="flex items-center gap-1.5 text-sm text-indigo-400 hover:text-indigo-300 transition-colors">
+            <Sparkles className="w-4 h-4" />
+            Batch Sweep
+          </Link>
+          <Link to="/carl"
+            className="flex items-center gap-1.5 text-sm text-purple-400 hover:text-purple-300 transition-colors">
+            <Bot className="w-4 h-4" />
+            CARL
+          </Link>
           <Link
             to="/settings"
             className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors"
@@ -106,6 +121,16 @@ export default function DashboardPage() {
             {user.demo_jobs_remaining !== null && user.demo_jobs_remaining !== undefined
               ? `${user.demo_jobs_remaining} simulation${user.demo_jobs_remaining !== 1 ? 's' : ''} remaining`
               : ''}
+            {user.role === 'demo' && user.demo_expires_at ? (
+              <span className="text-xs text-yellow-400">
+                · Demo expires {new Date(user.demo_expires_at).toLocaleDateString()}
+              </span>
+            ) : user.role === 'viewer' ? (
+              <span className="text-xs text-yellow-500">
+                · Free tier — upgrade for full access
+                <a href="/billing" className="text-indigo-400 hover:text-indigo-300 ml-1 underline">Upgrade</a>
+              </span>
+            ) : null}
             {user.demo_expires_at
               ? ` · Expires ${new Date(user.demo_expires_at).toLocaleDateString()}`
               : ''}

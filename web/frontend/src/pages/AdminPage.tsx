@@ -6,7 +6,7 @@ import {
 } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 import type { UserRole, UserInfo, OrgInfo } from '../types'
-import { ArrowLeft, Search, RefreshCw, Users, Building2, ShieldAlert } from 'lucide-react'
+import { ArrowLeft, Search, RefreshCw, Users, Building2, ShieldAlert, Bot, Save } from 'lucide-react'
 
 const ALL_ROLES: UserRole[] = ['admin', 'team_manager', 'creator', 'viewer', 'demo']
 
