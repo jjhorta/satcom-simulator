@@ -14,6 +14,7 @@ from ..db import (
     update_user,
 )
 from ..models import RegisterRequest, TokenResponse, UserOut
+from ..disposable import is_disposable_email, valid_email_pattern
 from ..rbac import get_effective_role
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -58,7 +59,15 @@ async def register(
     settings: Settings = Depends(get_settings),
 ):
     """Register a new user + personal organization. Returns JWT."""
-    if get_user_by_email(settings.outputs_dir, body.email):
+    email = body.email.strip().lower()
+
+    if not valid_email_pattern(email):
+        raise HTTPException(status_code=400, detail="Invalid email format")
+
+    if is_disposable_email(email):
+        raise HTTPException(status_code=400, detail="Temporary/disposable email addresses are not allowed")
+
+    if get_user_by_email(settings.outputs_dir, email):
         raise HTTPException(status_code=409, detail="Email already registered")
 
     # All self-registrations start as Demo (14-day trial)
