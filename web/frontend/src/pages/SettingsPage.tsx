@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { useAuthStore } from '../store/authStore'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Satellite, RotateCcw, Save, ChevronDown, ChevronRight, Plus, Trash2, Sparkles, Brain, ShieldCheck, Pencil, Check, X as XIcon, Share2, Lock, Bot } from 'lucide-react'
 import { useAiStore, isAiConfigured } from '../store/aiStore'
@@ -1660,6 +1661,32 @@ export default function SettingsPage() {
 
               {/* ── CARL Configuration ── */}
               <CarlConfigSection />
+
+              {/* ── Two-Factor Authentication ── */}
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-indigo-400" />
+                  <p className="text-sm font-medium text-white">Two-Factor Authentication</p>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Add an extra layer of security. When enabled, you will need a verification code sent to your email
+                  in addition to your password when signing in.
+                </p>
+                {twofaStatus !== null && (
+                  <div className="flex items-center gap-3">
+                    <button onClick={handleToggle2FA}
+                      className={"px-4 py-1.5 rounded-lg text-xs font-medium transition-colors " + (
+                        twofaStatus ? "bg-red-600/20 text-red-400 border border-red-700/50 hover:bg-red-600/30"
+                                   : "bg-indigo-600 text-white hover:bg-indigo-500"
+                      )}>
+                      {twofaStatus ? "Disable 2FA" : "Enable 2FA"}
+                    </button>
+                    <span className={"text-xs " + (twofaStatus ? "text-emerald-400" : "text-gray-500")}>
+                      {twofaStatus ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                )}
+              </div>
 
               {/* ── Report Sharing ── */}
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4 mt-2">

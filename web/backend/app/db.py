@@ -65,6 +65,8 @@ def init_db(outputs_dir: Path) -> None:
                 demo_expires_at         TEXT,
                 demo_jobs_limit         INTEGER DEFAULT 10,
                 demo_jobs_used          INTEGER DEFAULT 0,
+                google_id               TEXT    UNIQUE,
+                twofa_enabled           INTEGER DEFAULT 0,
                 created_at              TEXT    NOT NULL DEFAULT (datetime('now')),
                 updated_at              TEXT    NOT NULL DEFAULT (datetime('now')),
                 last_login_at           TEXT,

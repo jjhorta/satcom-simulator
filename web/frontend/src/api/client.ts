@@ -278,3 +278,7 @@ export const forgotPassword = (email: string) =>
 
 export const resetPassword = (token: string, password: string) =>
   http.post('/auth/reset-password', { token, password }).then(r => r.data)
+
+// ── 2FA ────────────────────────────────────────────────────────────
+export const twofaVerify = (tempToken: string, code: string) =>
+  http.post('/auth/twofa/verify', { temp_token: tempToken, code }).then(r => r.data)

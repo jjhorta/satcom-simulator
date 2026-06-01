@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from ..auth import create_access_token, hash_password, get_current_user
@@ -319,3 +319,205 @@ async def reset_password(
     del tokens[token]
     _save_reset_tokens(settings, tokens)
     return {"status": "ok", "detail": "Password updated successfully"}
+
+def _user_from_row(row) -> dict:
+    columns = ['id', 'email', 'username', 'password_hash', 'role', 'org_id',
+               'is_active', 'stripe_customer_id', 'subscription_status',
+               'jobs_used_this_month', 'ai_used_this_month', 'current_month',
+               'demo_expires_at', 'demo_jobs_limit', 'demo_jobs_used',
+               'created_at', 'updated_at', 'last_login_at', 'google_id',
+               'twofa_enabled']
+    return dict(zip(columns, row))
+
+
+# --- Google OAuth ----------------------------------------------------------
+
+import secrets
+import urllib.parse
+
+
+@router.get("/google/login")
+async def google_login(request: Request, settings: Settings = Depends(get_settings)):
+    if not settings.google_client_id:
+        raise HTTPException(status_code=501, detail="Google OAuth not configured")
+    redirect_uri = settings.app_url.rstrip("/") + "/api/auth/google/callback"
+    params = urllib.parse.urlencode({
+        "client_id": settings.google_client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+    })
+    url = f"https://accounts.google.com/o/oauth2/v2/auth?{params}"
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url)
+
+
+@router.get("/google/callback")
+async def google_callback(code: str, request: Request, settings: Settings = Depends(get_settings)):
+    import httpx
+    import sqlite3
+    redirect_uri = settings.app_url.rstrip("/") + "/api/auth/google/callback"
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post("https://oauth2.googleapis.com/token", data={
+            "code": code, "client_id": settings.google_client_id,
+            "client_secret": settings.google_client_secret,
+            "redirect_uri": redirect_uri, "grant_type": "authorization_code",
+        })
+        if resp.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to exchange Google auth code")
+        token_data = resp.json()
+        resp2 = await client.get("https://oauth2.googleapis.com/tokeninfo?id_token=" + token_data["id_token"])
+        if resp2.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to verify Google ID token")
+        user_info = resp2.json()
+    google_id = user_info["sub"]
+    email = user_info.get("email", "").lower()
+    name = user_info.get("name", email.split("@")[0])
+    conn = sqlite3.connect(str(settings.outputs_dir / "users.db"))
+    cur = conn.execute("SELECT * FROM users WHERE google_id = ?", (google_id,))
+    row = cur.fetchone()
+    if row:
+        user = _user_from_row(row)
+    else:
+        cur = conn.execute("SELECT * FROM users WHERE email = ?", (email,))
+        row = cur.fetchone()
+        if row:
+            conn.execute("UPDATE users SET google_id = ? WHERE id = ?", (google_id, row[0]))
+            user = _user_from_row(row)
+        else:
+            pw_hash = hash_password(secrets.token_urlsafe(16))
+            conn.execute("INSERT INTO users (email, username, password_hash, role, google_id, demo_expires_at) VALUES (?, ?, ?, 'demo', ?, datetime('now', '+14 days'))", (email, name, pw_hash, google_id))
+            uid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            oid = uid + 100
+            conn.execute("INSERT INTO organizations (id, name, owner_id, subscription_tier) VALUES (?, ?, ?, 'free')", (oid, name + "'s Team", uid))
+            conn.execute("UPDATE users SET org_id = ? WHERE id = ?", (oid, uid))
+            user = {"id": uid, "email": email, "username": name, "role": "demo", "org_id": oid, "twofa_enabled": 0}
+    conn.commit()
+    conn.close()
+    app_url = settings.app_url or "https://constellasim.com/constellation-simulator"
+    from fastapi.responses import RedirectResponse
+    if user.get("twofa_enabled"):
+        temp_token = create_access_token({"user_id": user["id"], "purpose": "twofa"}, settings, expires_delta=timedelta(minutes=5))
+        return RedirectResponse(app_url + "/login?twofa=" + temp_token)
+    token = _issue_token(user, settings)
+    return RedirectResponse(app_url + "/login?token=" + token)
+
+
+# --- 2FA via email ---------------------------------------------------------
+
+import random
+import smtplib
+import ssl
+from email.mime.text import MIMEText
+
+_TWOFA_CODES: dict[str, dict] = {}
+
+
+def _send_twofa_code(settings, user: dict) -> str:
+    code = f"{random.randint(100000, 999999)}"
+    temp_token = create_access_token({"user_id": user["id"], "purpose": "twofa"}, settings, expires_delta=timedelta(minutes=5))
+    _TWOFA_CODES[temp_token] = {"code": code, "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(), "user_id": user["id"]}
+    body = "Hello,\n\nYour Constellation Simulator verification code is:\n\n   " + code + "\n\nThis code expires in 5 minutes. Never share this code with anyone.\n\n- Constellation Simulator"
+    msg = MIMEText(body)
+    msg["Subject"] = "Your Constellation Simulator verification code"
+    msg["From"] = settings.smtp_username or "noreply@constellasim.com"
+    msg["To"] = user["email"]
+    if settings.smtp_password:
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=ctx, timeout=10) as server:
+            server.login(settings.smtp_username, settings.smtp_password)
+            server.send_message(msg)
+    return temp_token
+
+
+@router.post("/twofa/send")
+async def twofa_send(body: dict, settings: Settings = Depends(get_settings)):
+    email = body.get("email", "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    import sqlite3
+    conn = sqlite3.connect(str(settings.outputs_dir / "users.db"))
+    cur = conn.execute("SELECT * FROM users WHERE email = ?", (email,))
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return {"status": "ok", "detail": "If registered, a code has been sent."}
+    user = _user_from_row(row)
+    temp_token = _send_twofa_code(settings, user)
+    return {"status": "ok", "temp_token": temp_token}
+
+
+@router.post("/twofa/verify")
+async def twofa_verify(body: dict, settings: Settings = Depends(get_settings)):
+    temp_token = body.get("temp_token", "")
+    code = body.get("code", "")
+    info = _TWOFA_CODES.get(temp_token)
+    if not info:
+        raise HTTPException(status_code=400, detail="Invalid or expired session")
+    expires = datetime.fromisoformat(info["expires_at"])
+    if expires < datetime.now(timezone.utc):
+        del _TWOFA_CODES[temp_token]
+        raise HTTPException(status_code=400, detail="Code expired")
+    if info["code"] != code.strip():
+        raise HTTPException(status_code=400, detail="Invalid code")
+    del _TWOFA_CODES[temp_token]
+    import sqlite3
+    conn = sqlite3.connect(str(settings.outputs_dir / "users.db"))
+    cur = conn.execute("SELECT * FROM users WHERE id = ?", (info["user_id"],))
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=400, detail="User not found")
+    user = _user_from_row(row)
+    token = _issue_token(user, settings)
+    return {"status": "ok", "access_token": token, "user": _user_out(user)}
+
+
+@router.post("/twofa/enable")
+async def twofa_enable(body: dict, settings: Settings = Depends(get_settings), current_user: dict = Depends(get_current_user)):
+    _send_twofa_code(settings, current_user)
+    return {"status": "ok", "detail": "Code sent"}
+
+
+@router.post("/twofa/confirm")
+async def twofa_confirm(body: dict, settings: Settings = Depends(get_settings), current_user: dict = Depends(get_current_user)):
+    code = body.get("code", "")
+    for t, info in list(_TWOFA_CODES.items()):
+        if info["user_id"] == current_user["id"]:
+            expires = datetime.fromisoformat(info["expires_at"])
+            if expires >= datetime.now(timezone.utc) and info["code"] == code.strip():
+                import sqlite3
+                conn = sqlite3.connect(str(settings.outputs_dir / "users.db"))
+                conn.execute("UPDATE users SET twofa_enabled = 1 WHERE id = ?", (current_user["id"],))
+                conn.commit()
+                conn.close()
+                del _TWOFA_CODES[t]
+                return {"status": "ok", "detail": "2FA enabled"}
+            break
+    _send_twofa_code(settings, current_user)
+    raise HTTPException(status_code=400, detail="Invalid code. A new code has been sent.")
+
+
+@router.post("/twofa/disable")
+async def twofa_disable(body: dict, settings: Settings = Depends(get_settings), current_user: dict = Depends(get_current_user)):
+    code = body.get("code", "")
+    for t, info in list(_TWOFA_CODES.items()):
+        if info["user_id"] == current_user["id"]:
+            expires = datetime.fromisoformat(info["expires_at"])
+            if expires >= datetime.now(timezone.utc) and info["code"] == code.strip():
+                import sqlite3
+                conn = sqlite3.connect(str(settings.outputs_dir / "users.db"))
+                conn.execute("UPDATE users SET twofa_enabled = 0 WHERE id = ?", (current_user["id"],))
+                conn.commit()
+                conn.close()
+                del _TWOFA_CODES[t]
+                return {"status": "ok", "detail": "2FA disabled"}
+            break
+    _send_twofa_code(settings, current_user)
+    return {"status": "ok", "detail": "Code sent to your email"}
+
+
+@router.get("/twofa/status")
+async def twofa_status(current_user: dict = Depends(get_current_user)):
+    return {"twofa_enabled": bool(current_user.get("twofa_enabled", 0))}

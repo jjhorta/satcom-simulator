@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     stripe_price_ent_year: str = ""
     app_url: str = "https://constellasim.com/constellation-simulator"
     support_email: str = "admin@constellation.com"
+    google_client_id: str = ""
+    google_client_secret: str = ""
     smtp_host: str = "cp226.webserver.pt"
     smtp_port: int = 465
     smtp_username: str = "admin@constellasim.com"
