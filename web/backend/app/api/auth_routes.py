@@ -320,6 +320,37 @@ async def reset_password(
     _save_reset_tokens(settings, tokens)
     return {"status": "ok", "detail": "Password updated successfully"}
 
+
+def _issue_token(user: dict, settings: Settings) -> str:
+    effective_role = get_effective_role(user)
+    return create_access_token(
+        {
+            "sub": user["email"],
+            "role": effective_role,
+            "org_id": user.get("org_id"),
+            "user_id": user["id"],
+        },
+        settings,
+    )
+
+def _user_out(user: dict) -> dict:
+    effective_role = get_effective_role(user)
+    demo_remaining = None
+    if user.get("role") == "demo":
+        demo_remaining = max(
+            0,
+            (user.get("demo_jobs_limit") or 10) - (user.get("demo_jobs_used") or 0),
+        )
+    return {
+        "id": user["id"],
+        "email": user["email"],
+        "username": user["username"],
+        "role": effective_role,
+        "org_id": user.get("org_id"),
+        "demo_expires_at": user.get("demo_expires_at"),
+        "demo_jobs_remaining": demo_remaining,
+    }
+
 def _user_from_row(row) -> dict:
     columns = ['id', 'email', 'username', 'password_hash', 'role', 'org_id',
                'is_active', 'stripe_customer_id', 'subscription_status',
