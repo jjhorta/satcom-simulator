@@ -160,7 +160,7 @@ export default function BatchPage() {
                   onChange={(e) => updateValues(i, e.target.value)}
                   className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-white
                              focus:outline-none focus:border-indigo-500"
-                  placeholder="e.g. 12, 24, 48"
+
                 />
                 <span className="text-xs text-gray-500 w-8">{meta.unit}</span>
                 <button onClick={() => removeParam(i)}

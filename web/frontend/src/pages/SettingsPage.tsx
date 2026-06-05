@@ -1127,6 +1127,8 @@ export default function SettingsPage() {
                                         setEditingName(name)
                                         setEditDraft({ name, ...p })
                                       }
+  const [twofaStatus, setTwofaStatus] = useState<boolean | null>(null)
+  const handleToggle2FA = () => setTwofaStatus(!twofaStatus)
                                     }}
                                     className={`transition-colors ${editingName === name ? 'text-indigo-400 hover:text-indigo-300' : 'text-gray-600 hover:text-indigo-400'}`}
                                     title={editingName === name ? 'Cancel edit' : 'Edit preset'}

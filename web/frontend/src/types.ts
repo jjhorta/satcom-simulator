@@ -298,6 +298,7 @@ export interface SweepResultEntry {
   label: string;
   params: Record<string, number>;
   success: boolean;
+  heatmap_png?: string;
   metrics?: {
     mean_coverage_pct: number;
     max_coverage_pct: number;

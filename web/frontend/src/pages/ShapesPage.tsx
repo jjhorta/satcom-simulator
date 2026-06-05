@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ArrowLeft, Plus, Trash2, Download, Globe } from 'lucide-react'
-import { useNavigate, Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 
 interface Shape {
   id: string
@@ -10,7 +10,7 @@ interface Shape {
 }
 
 export default function ShapesPage() {
-  const navigate = useNavigate()
+  
   const [shapes, setShapes] = useState<Shape[]>([])
   const [newName, setNewName] = useState('')
   const [newType, setNewType] = useState<'polygon' | 'circle' | 'corridor'>('polygon')

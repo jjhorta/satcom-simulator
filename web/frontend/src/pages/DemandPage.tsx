@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { ArrowLeft, MapPin, Ship, Radio } from 'lucide-react'
-import { useNavigate, Link } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 const DEMAND_PROFILES = [
   { id: 'rural',      label: 'Rural Broadband',     desc: '5 Mbps per 100 km²',      icon: '🏘️', terminals: 0.05, bw: 5 },
@@ -11,7 +11,7 @@ const DEMAND_PROFILES = [
 ]
 
 export default function DemandPage() {
-  const navigate = useNavigate()
+  
   const [selectedProfile, setSelectedProfile] = useState('maritime')
   const [customTerminals, setCustomTerminals] = useState('')
   const [customBW, setCustomBW] = useState('')

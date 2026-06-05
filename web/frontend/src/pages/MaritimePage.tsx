@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { ArrowLeft, Ship, Radio, MapPin, Anchor } from 'lucide-react'
-import { useNavigate, Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 
 export default function MaritimePage() {
-  const navigate = useNavigate()
   const [region, setRegion] = useState('north_atlantic')
   const [comms, setComms] = useState('vdes')
   const [bandwidthPerShip, setBandwidthPerShip] = useState(2.0)

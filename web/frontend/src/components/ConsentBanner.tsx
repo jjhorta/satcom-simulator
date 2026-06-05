@@ -4,9 +4,9 @@ import { Cookie, X } from 'lucide-react'
 const CLARITY_ID = 'wwc9bke5iv'
 
 function loadClarity() {
-  if (typeof window === 'undefined' || (window as Record<string, unknown>).clarity_loaded) return
+  if (typeof window === 'undefined' || (window as unknown as Record<string, unknown>).clarity_loaded) return
   try {
-    const c = window as Record<string, unknown>
+    const c = window as unknown as Record<string, unknown>
     const a = 'clarity' in c ? c['clarity'] as (...args: unknown[]) => void : function(...args: unknown[]) {
       const q = ((c['clarity_q'] || []) as unknown[][])
       q.push(args)
@@ -18,7 +18,7 @@ function loadClarity() {
     t.src = `https://www.clarity.ms/tag/${CLARITY_ID}`
     const y = document.getElementsByTagName('script')[0]
     y?.parentNode?.insertBefore(t, y)
-    ;(window as Record<string, unknown>).clarity_loaded = true
+    ;(window as unknown as Record<string, unknown>).clarity_loaded = true
   } catch { /* ignore */ }
 }
 
