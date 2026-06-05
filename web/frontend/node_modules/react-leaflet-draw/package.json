@@ -1,0 +1,79 @@
+{
+  "name": "react-leaflet-draw",
+  "version": "0.21.0",
+  "description": "React component for leaflet-draw",
+  "main": "dist/react-leaflet-draw.js",
+  "module": "dist/esm/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:dist": "npm run build:umd && npm run build:umd:min && npm run build:esm",
+    "build:umd": "webpack ./src/index.js --output-filename react-leaflet-draw.js",
+    "build:umd:min": "webpack ./src/index.js --output-filename react-leaflet-draw.min.js",
+    "build:esm": "babel src --out-dir dist/esm",
+    "build": " npm run build:dist",
+    "prepublish": "npm run build",
+    "version": "npm run build",
+    "postversion": "git push && git push --tags",
+    "example:class": "webpack-dev-server --config ./examples/class/webpack.config.js",
+    "example:hooks": "cd ./examples/hooks && vite",
+    "lint": "eslint ./src"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/alex3165/react-leaflet-draw.git"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "keywords": [
+    "react",
+    "leaflet",
+    "draw",
+    "editor"
+  ],
+  "author": "Alexandre Rieux",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/alex3165/react-leaflet-draw/issues"
+  },
+  "homepage": "https://github.com/alex3165/react-leaflet-draw#readme",
+  "types": "src/index.d.ts",
+  "peerDependencies": {
+    "leaflet": "^1.8.0",
+    "leaflet-draw": "^1.0.4",
+    "prop-types": "^15.5.2",
+    "react": "^19.1.0",
+    "react-leaflet": "^5.0.0"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.12.1",
+    "@babel/core": "^7.12.3",
+    "@babel/eslint-parser": "^7.12.1",
+    "@babel/plugin-proposal-class-properties": "^7.12.1",
+    "@babel/preset-env": "^7.12.1",
+    "@babel/preset-react": "^7.12.1",
+    "@types/leaflet": "^1.9.16",
+    "@types/leaflet-draw": "^1.0.11",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "babel-loader": "^8.1.0",
+    "eslint": "^8.17.0",
+    "eslint-plugin-react": "^7.21.5",
+    "leaflet": "^1.9.4",
+    "leaflet-draw": "^1.0.4",
+    "lodash-webpack-plugin": "^0.11.5",
+    "lodash.isequal": "^4.4.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-leaflet": "^5.0.0",
+    "vite": "^7.0.0",
+    "webpack": "^5.99.9",
+    "webpack-cli": "^4.9.2",
+    "webpack-dev-server": "^4.9.2"
+  },
+  "dependencies": {
+    "fast-deep-equal": "^3.1.3",
+    "lodash-es": "^4.17.15"
+  }
+}
