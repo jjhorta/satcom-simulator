@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { LogOut, Satellite, HelpCircle, Settings, ShieldAlert, Users, CreditCard, Sparkles, Bot } from 'lucide-react'
+import { LogOut, Satellite, HelpCircle, Settings, ShieldAlert, Users, CreditCard, Sparkles, Bot, BarChart3, Globe, Anchor } from 'lucide-react'
 import { useAuthStore }  from '../store/authStore'
 import { useReportStore } from '../store/reportStore'
 import { useAiStore }    from '../store/aiStore'
@@ -88,6 +88,21 @@ export default function DashboardPage() {
             className="flex items-center gap-1.5 text-sm text-purple-400 hover:text-purple-300 transition-colors">
             <Bot className="w-4 h-4" />
             CARL
+          </Link>
+          <Link to="/demand"
+            className="flex items-center gap-1.5 text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
+            <BarChart3 className="w-4 h-4" />
+            Demand
+          </Link>
+          <Link to="/shapes"
+            className="flex items-center gap-1.5 text-sm text-amber-400 hover:text-amber-300 transition-colors">
+            <Globe className="w-4 h-4" />
+            Shapes
+          </Link>
+          <Link to="/maritime"
+            className="flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 transition-colors">
+            <Anchor className="w-4 h-4" />
+            Maritime
           </Link>
           <Link
             to="/settings"
