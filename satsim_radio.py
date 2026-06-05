@@ -18,6 +18,7 @@ from sim.modes.orbit import view_orbit
 from sim.modes.track import view_track
 from sim.modes.route import run_route_analysis
 from sim.modes.throughput import run_throughput
+from sim.grid import generate_grid
 
 def main():
     parser = argparse.ArgumentParser(description="Satellite Constellation Radio Link Simulator - Combined")
@@ -67,6 +68,10 @@ def main():
     heatmap_parser.add_argument('--sso', action='store_true')
     heatmap_parser.add_argument('--bidi', action='store_true')
     heatmap_parser.add_argument('--res', type=float, default=5.0, help='Grid resolution in degrees')
+    heatmap_parser.add_argument('--grid', default='latlon', choices=['latlon', 'h3'],
+                                help='Grid type: latlon (rectangular) or h3 (hexagonal)')
+    heatmap_parser.add_argument('--h3-res', type=int, default=4,
+                                help='H3 resolution (0-8, used when --grid=h3)')
     heatmap_parser.add_argument('--min-elev', type=float, default=10.0, help='Minimum elevation angle (degrees)')
     heatmap_parser.add_argument('--constellation', default=None,
                                 help='Named multi-shell constellation preset')
@@ -89,6 +94,10 @@ def main():
     heatmap_rf_parser.add_argument('--sso', action='store_true')
     heatmap_rf_parser.add_argument('--bidi', action='store_true')
     heatmap_rf_parser.add_argument('--res', type=float, default=5.0, help='Grid resolution in degrees')
+    heatmap_rf_parser.add_argument('--grid', default='latlon', choices=['latlon', 'h3'],
+                                   help='Grid type: latlon (rectangular) or h3 (hexagonal)')
+    heatmap_rf_parser.add_argument('--h3-res', type=int, default=4,
+                                   help='H3 resolution (0-8, used when --grid=h3)')
     heatmap_rf_parser.add_argument('--min-elev', type=float, default=10.0, help='Minimum elevation angle (degrees)')
     heatmap_rf_parser.add_argument('--constellation', default=None,
                                    help='Named multi-shell constellation preset')
@@ -181,6 +190,10 @@ def main():
     throughput_parser.add_argument('--sso', action='store_true')
     throughput_parser.add_argument('--bidi', action='store_true')
     throughput_parser.add_argument('--res', type=float, default=5.0, help='Grid resolution in degrees')
+    throughput_parser.add_argument('--grid', default='latlon', choices=['latlon', 'h3'],
+                                   help='Grid type: latlon (rectangular) or h3 (hexagonal)')
+    throughput_parser.add_argument('--h3-res', type=int, default=4,
+                                   help='H3 resolution (0-8, used when --grid=h3)')
     throughput_parser.add_argument('--min-elev', type=float, default=10.0, help='Minimum elevation angle')
     throughput_parser.add_argument('--duration', type=int, default=60, help='Duration in minutes')
     throughput_parser.add_argument('--step', type=int, default=10, help='Snapshot interval in minutes')

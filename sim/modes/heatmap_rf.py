@@ -81,10 +81,23 @@ def run_heatmap_rf(args):
         sats_list = [EarthSatellite(l1, l2, n, ts) for n, l1, l2 in tles_single]
         walker_suffix = f"walker_{int(inc)}_{args.sats}_{args.planes}"
 
-    lats = np.arange(-90, 91, args.res)
-    lons = np.arange(-180, 181, args.res)
-    lon_grid, lat_grid = np.meshgrid(lons, lats)
-    grid_points = np.column_stack([lat_grid.ravel(), lon_grid.ravel()])
+    # ── Grid generation (latlon or h3) ────────────────
+    grid_mode = getattr(args, 'grid', 'latlon')
+    h3_res = getattr(args, 'h3_res', 4)
+    if grid_mode == 'h3':
+        from sim.grid import generate_grid
+        h3_cells = generate_grid('h3', h3_res=h3_res)
+        grid_points = np.array([[c['lat'], c['lon']] for c in h3_cells])
+        print(f"📊 H3 Grid: {len(grid_points)} cells at res {h3_res}")
+        lats = np.unique(grid_points[:, 0])
+        lons = np.unique(grid_points[:, 1])
+        lon_grid, lat_grid = np.meshgrid(lons, lats)
+    else:
+        lats = np.arange(-90, 91, args.res)
+        lons = np.arange(-180, 181, args.res)
+        lon_grid, lat_grid = np.meshgrid(lons, lats)
+        grid_points = np.column_stack([lat_grid.ravel(), lon_grid.ravel()])
+        print(f"📊 Grid: {len(grid_points)} points at {args.res}° resolution")
 
     print(f"📊 Grid: {len(grid_points)} points")
 
