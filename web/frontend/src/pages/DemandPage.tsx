@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useAuthStore } from '../store/authStore'
 
 const DEMAND_PROFILES = [
   { id: 'rural',      label: 'Rural Broadband',     desc: '5 Mbps per 100 km²',      icon: '🏘️', terminals: 0.05, bw: 5 },
@@ -11,6 +12,7 @@ const DEMAND_PROFILES = [
 ]
 
 export default function DemandPage() {
+  const token = useAuthStore(s => s.token)
   
   const [selectedProfile, setSelectedProfile] = useState('maritime')
   const [customTerminals, setCustomTerminals] = useState('')
@@ -28,7 +30,7 @@ export default function DemandPage() {
     try {
       const res = await fetch('/constellation-simulator/api/sim/supply-demand', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           profile: selectedProfile,
           grid_res: gridRes,
