@@ -14,6 +14,9 @@ import TeamPage from './pages/TeamPage'
 import BillingPage from './pages/BillingPage'
 import BatchPage      from './pages/BatchPage'
 import CopilotPage    from './pages/CopilotPage'
+import DemandPage     from './pages/DemandPage'
+import ShapesPage     from './pages/ShapesPage'
+import MaritimePage   from './pages/MaritimePage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token)
@@ -39,6 +42,9 @@ export default function App() {
         <Route path="/billing"  element={<PrivateRoute><BillingPage /></PrivateRoute>} />
         <Route path="/batch"   element={<PrivateRoute><BatchPage /></PrivateRoute>} />
         <Route path="/carl"    element={<PrivateRoute><CopilotPage /></PrivateRoute>} />
+        <Route path="/demand"  element={<PrivateRoute><DemandPage /></PrivateRoute>} />
+        <Route path="/shapes"  element={<PrivateRoute><ShapesPage /></PrivateRoute>} />
+        <Route path="/maritime" element={<PrivateRoute><MaritimePage /></PrivateRoute>} />
         <Route path="/*"        element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
       </Routes>
     <ConsentBanner />
