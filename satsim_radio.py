@@ -17,6 +17,7 @@ from sim.modes.sky import view_sky, run_coverage
 from sim.modes.orbit import view_orbit
 from sim.modes.track import view_track
 from sim.modes.route import run_route_analysis
+from sim.modes.throughput import run_throughput
 
 def main():
     parser = argparse.ArgumentParser(description="Satellite Constellation Radio Link Simulator - Combined")
@@ -167,6 +168,29 @@ def main():
                               help='Inline JSON array of shell dicts')
     route_parser.add_argument('--max-sats', type=int, default=250,
                               help='Max satellites to evaluate per timestep (default: 250)')
+
+    # Throughput mode
+    throughput_parser = subparsers.add_parser('throughput', help='IP throughput heatmap over time')
+    throughput_parser.add_argument('--comms', default='vdes', choices=COMMS_PAYLOADS.keys())
+    throughput_parser.add_argument('--weather', default='clear', choices=WEATHER_SCENARIOS.keys())
+    throughput_parser.add_argument('--sats', type=int, default=66)
+    throughput_parser.add_argument('--planes', type=int, default=6)
+    throughput_parser.add_argument('--altitude', type=float, default=600.0)
+    throughput_parser.add_argument('--phasing', type=int, default=1)
+    throughput_parser.add_argument('--inclination', type=float, default=87.4)
+    throughput_parser.add_argument('--sso', action='store_true')
+    throughput_parser.add_argument('--bidi', action='store_true')
+    throughput_parser.add_argument('--res', type=float, default=5.0, help='Grid resolution in degrees')
+    throughput_parser.add_argument('--min-elev', type=float, default=10.0, help='Minimum elevation angle')
+    throughput_parser.add_argument('--duration', type=int, default=60, help='Duration in minutes')
+    throughput_parser.add_argument('--step', type=int, default=10, help='Snapshot interval in minutes')
+    throughput_parser.add_argument('--constellation', default=None, help='Named multi-shell constellation preset')
+    throughput_parser.add_argument('--constellation-name', default=None, dest='constellation_name',
+                                   help='Display name for a --shells multi-shell run')
+    throughput_parser.add_argument('--shells', default=None, metavar='JSON',
+                                   help='Inline JSON array of shell dicts')
+    throughput_parser.add_argument('--max-sats', type=int, default=250,
+                                   help='Max satellites to include')
 
     # Latency mode (ISL routing, end-to-end RTT vs fiber baseline)
     latency_parser = subparsers.add_parser('latency',
