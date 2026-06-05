@@ -46,6 +46,8 @@ app.include_router(org_router)
 app.include_router(billing_router)
 app.include_router(contact_router)
 app.include_router(carl_router)
+from .api.sim_routes import router as sim_router
+app.include_router(sim_router)
 
 
 @app.on_event("startup")
