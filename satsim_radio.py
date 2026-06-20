@@ -244,6 +244,12 @@ def main():
     latency_parser.add_argument('--shells', default=None, metavar='JSON',
                                 help='Inline JSON array of shell dicts')
     latency_parser.add_argument('--max-sats', type=int, default=250)
+    latency_parser.add_argument('--shape', default=None,
+                                help='GeoJSON shape file to restrict analysis region')
+    latency_parser.add_argument('--gateways', default=None,
+                                help='Semicolon-separated lat,lon for feeder-link gateways')
+    latency_parser.add_argument('--dual-hop', action='store_true',
+                                help='Enable dual-hop (feeder link + user link) latency calculation')
 
     args = parser.parse_args()
     

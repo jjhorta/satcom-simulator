@@ -24,6 +24,7 @@ from ..routing import (
     LatencyPathResult,
     find_min_latency_path,
     fiber_latency_ms,
+    compute_dual_hop_latency,
     great_circle_distance_km,
 )
 
@@ -206,12 +207,40 @@ def run_latency(args) -> dict:
     min_elev = float(getattr(args, "min_elev", 10.0))
     use_fiber = bool(getattr(args, "fiber_baseline", not getattr(args, "no_fiber", False)))
     architecture = str(getattr(args, "architecture", "regenerative-isl"))
+    use_dual_hop = bool(getattr(args, "dual_hop", False))
+    gateways_arg = str(getattr(args, "gateways", "") or "")
+
+    # Parse gateways
+    gateway_list = []
+    if use_dual_hop:
+        if gateways_arg.strip():
+            for part in gateways_arg.split(";"):
+                part = part.strip()
+                if "," in part:
+                    try:
+                        glat = float(part.split(",")[0].strip())
+                        glon = float(part.split(",")[1].strip())
+                        gateway_list.append((f"gw_{glat:.1f}_{glon:.1f}", f"{glat:.1f}, {glon:.1f}", glat, glon))
+                    except ValueError:
+                        pass
+        if not gateway_list:
+            try:
+                from ..ground_stations import load_gateways
+                from ..config import get_settings
+                settings = get_settings()
+                for gw_obj in load_gateways(settings.outputs_dir):
+                    if gw_obj.enabled and "vdes" in gw_obj.freq_bands:
+                        gateway_list.append((gw_obj.id, gw_obj.name, gw_obj.latitude, gw_obj.longitude))
+            except Exception as e:
+                print(f"   Could not load default gateways: {e}")
+        print(f"   Dual-hop: {len(gateway_list)} gateways loaded")
 
     print(f"   Window: {duration_min} min  |  step: {step_min} min  |  snapshots: {n_steps}")
     print(f"   ISL range: {isl_range:.0f} km  |  hop delay: {switching_delay:.1f} ms  |  min-elev: {min_elev:.1f}°")
 
     # ── Main loop ──────────────────────────────────────────────────────────
     rtt_series: list[float] = []
+    dualhop_series: list[float] = []
     rows: list[dict] = []
     representative: Optional[LatencyPathResult] = None
 
@@ -266,6 +295,29 @@ def run_latency(args) -> dict:
             if representative is None:
                 representative = res
 
+        # Dual-hop computation
+        dualhop_rtt = None
+        dualhop_gw = ""
+        if use_dual_hop and gateway_list:
+            dh = compute_dual_hop_latency(
+                sat_positions_km=positions,
+                adj_matrix=adj,
+                src_lat_deg=src_lat,
+                src_lon_deg=src_lon,
+                dst_lat_deg=dst_lat,
+                dst_lon_deg=dst_lon,
+                gateways=gateway_list,
+                min_elev_deg=min_elev,
+                feeder_min_elev_deg=5.0,
+                switching_delay_ms=switching_delay,
+                sat_names=sat_names,
+                architecture=architecture,
+            )
+            if dh.path_found:
+                dualhop_rtt = dh.total_rtt_ms
+                dualhop_gw = dh.feeder_gateway
+                dualhop_series.append(dualhop_rtt)
+
         rows.append({
             "time_min": step * step_min,
             "rtt_ms": "" if rtt is None else f"{rtt:.3f}",
@@ -278,6 +330,8 @@ def run_latency(args) -> dict:
             "downlink_ms": f"{res.downlink_ms:.3f}" if path_found else "",
             "isl_ms": f"{res.isl_ms:.3f}" if path_found else "",
             "switching_ms": f"{res.switching_ms:.3f}" if path_found else "",
+            "dualhop_rtt_ms": "" if dualhop_rtt is None else f"{dualhop_rtt:.3f}",
+            "dualhop_gateway": dualhop_gw,
         })
 
         if (step + 1) % 50 == 0:
