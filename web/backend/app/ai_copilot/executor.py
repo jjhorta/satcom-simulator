@@ -48,7 +48,7 @@ async def execute_tool_call(
             if args.get("bidi"):
                 payload["bidi"] = True
             # Latency-specific params
-            for key in ("from_location", "to_location", "duration", "step", "isl_range", "switching_delay"):
+            for key in ("from_location", "to_location", "duration", "step", "isl_range", "switching_delay", "architecture"):
                 if key in args:
                     payload[key] = args[key]
             if args.get("no_fiber"):

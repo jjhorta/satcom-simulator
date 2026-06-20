@@ -66,6 +66,8 @@ def main():
     heatmap_parser.add_argument('--phasing', type=int, default=1)
     heatmap_parser.add_argument('--inclination', type=float, default=87.4)
     heatmap_parser.add_argument('--sso', action='store_true')
+    heatmap_parser.add_argument('--gateways', default=None,
+    help='Semicolon-separated lat,lon for feeder-link gateways (e.g. "38.8,-9.38;32.63,-16.9")')
     heatmap_parser.add_argument('--bidi', action='store_true')
     heatmap_parser.add_argument('--res', type=float, default=5.0, help='Grid resolution in degrees')
     heatmap_parser.add_argument('--grid', default='latlon', choices=['latlon', 'h3'],
@@ -92,6 +94,8 @@ def main():
     heatmap_rf_parser.add_argument('--phasing', type=int, default=1)
     heatmap_rf_parser.add_argument('--inclination', type=float, default=87.4)
     heatmap_rf_parser.add_argument('--sso', action='store_true')
+    heatmap_rf_parser.add_argument('--gateways', default=None,
+    help='Semicolon-separated lat,lon for feeder-link gateways')
     heatmap_rf_parser.add_argument('--bidi', action='store_true')
     heatmap_rf_parser.add_argument('--res', type=float, default=5.0, help='Grid resolution in degrees')
     heatmap_rf_parser.add_argument('--grid', default='latlon', choices=['latlon', 'h3'],
@@ -227,6 +231,7 @@ def main():
     latency_parser.add_argument('--switching-delay', type=float, default=1.0, dest='switching_delay',
                                 help='Per-hop switching delay in ms')
     latency_parser.add_argument('--min-elev', type=float, default=10.0, dest='min_elev')
+    latency_parser.add_argument('--architecture', default='regenerative-isl', choices=['bentpipe','regenerative-isl','store-forward'], help='Architecture: bentpipe (direct), regenerative-isl (ISL route), store-forward (custody)')
     latency_parser.add_argument('--no-fiber', action='store_true', dest='no_fiber',
                                 help='Skip fiber baseline comparison')
     latency_parser.add_argument('--constellation', default=None,

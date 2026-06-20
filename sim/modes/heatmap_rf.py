@@ -144,6 +144,25 @@ def run_heatmap_rf(args):
 
         sat_norm = sat_pos / np.linalg.norm(sat_pos, axis=1)[:, np.newaxis]
 
+        if args.gateways:
+            gw_pairs = [tuple(float(x) for x in g.split(',')) for g in args.gateways.split(';')]
+            gw_cart = np.zeros((len(gw_pairs), 3))
+            for gi, (glat, glon) in enumerate(gw_pairs):
+                glat_r, glon_r = np.radians(glat), np.radians(glon)
+                gw_cart[gi] = [np.cos(glat_r)*np.cos(glon_r),
+                               np.cos(glat_r)*np.sin(glon_r),
+                               np.sin(glat_r)]
+            gw_sees_sat = np.zeros(sat_norm.shape[0], dtype=bool)
+            for si in range(sat_norm.shape[0]):
+                for gi in range(len(gw_pairs)):
+                    cos_angle = np.dot(sat_norm[si], gw_cart[gi])
+                    elev = 90.0 - np.degrees(np.arccos(cos_angle))
+                    if elev > 5.0:
+                        gw_sees_sat[si] = True
+                        break
+        else:
+            gw_sees_sat = np.ones(sat_norm.shape[0], dtype=bool)
+
         for i in range(0, len(grid_points), chunk_size):
             end = min(i + chunk_size, len(grid_points))
             chunk_obs = obs_vecs[i:end]

@@ -205,6 +205,7 @@ def run_latency(args) -> dict:
     switching_delay = float(getattr(args, "switching_delay", ISL_CONFIG["switching_delay_ms"]))
     min_elev = float(getattr(args, "min_elev", 10.0))
     use_fiber = bool(getattr(args, "fiber_baseline", not getattr(args, "no_fiber", False)))
+    architecture = str(getattr(args, "architecture", "regenerative-isl"))
 
     print(f"   Window: {duration_min} min  |  step: {step_min} min  |  snapshots: {n_steps}")
     print(f"   ISL range: {isl_range:.0f} km  |  hop delay: {switching_delay:.1f} ms  |  min-elev: {min_elev:.1f}°")
@@ -221,7 +222,10 @@ def run_latency(args) -> dict:
         )
         positions = np.array([s.at(t).frame_xyz(itrs).km for s in sats_list])
 
-        adj = isl_topology_from_walker(
+        if architecture == 'bentpipe':
+            adj = None
+        else:
+            adj = isl_topology_from_walker(
             num_sats=n_sats,
             num_planes=planes_eff,
             positions_km=positions,
@@ -242,6 +246,20 @@ def run_latency(args) -> dict:
 
         path_found = res is not None and res.num_hops > 0
         rtt = res.total_rtt_ms if path_found else None
+        if not path_found and architecture == "store-forward":
+            _c = []
+            for ts2 in range(step, min(step+120, n_steps)):
+                t2 = ts.utc(t0.utc.year, t0.utc.month, t0.utc.day, t0.utc.hour, t0.utc.minute+ts2*step_min)
+                p2 = np.array([s.at(t2).frame_xyz(itrs).km for s in sats_list])
+                n2 = p2 / np.linalg.norm(p2, axis=1)[:, np.newaxis]
+                dc = np.array([np.cos(np.radians(dst_lat))*np.cos(np.radians(dst_lon)), np.cos(np.radians(dst_lat))*np.sin(np.radians(dst_lon)), np.sin(np.radians(dst_lat))])
+                for sn in n2:
+                    if 90-np.degrees(np.arccos(np.dot(sn, dc))) > min_elev:
+                        _c.append((ts2-step)*step_min*60000+10)
+                        break
+                if _c: break
+            if _c: rtt = min(_c); path_found = True
+
         ow = res.total_one_way_ms if path_found else None
         if path_found:
             rtt_series.append(float(rtt))

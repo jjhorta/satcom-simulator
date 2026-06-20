@@ -282,3 +282,7 @@ export const resetPassword = (token: string, password: string) =>
 // ── 2FA ────────────────────────────────────────────────────────────
 export const twofaVerify = (tempToken: string, code: string) =>
   http.post('/auth/twofa/verify', { temp_token: tempToken, code }).then(r => r.data)
+// ── Ground Stations API ─────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const getGroundStations = (): Promise<any> =>
+  http.get('/ground-stations').then((r) => r.data)

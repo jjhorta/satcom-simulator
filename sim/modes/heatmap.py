@@ -129,13 +129,51 @@ def run_heatmap(args):
 
         sat_norm = sat_pos / np.linalg.norm(sat_pos, axis=1)[:, np.newaxis]
 
+        # ── Feeder link check (two-link availability) ──────────────────────
+        if args.gateways:
+            gw_pairs = [tuple(float(x) for x in g.split(",")) for g in args.gateways.split(";")]
+            gw_cart = np.zeros((len(gw_pairs), 3))
+            for gi, (glat, glon) in enumerate(gw_pairs):
+                glat_r, glon_r = np.radians(glat), np.radians(glon)
+                gw_cart[gi] = [np.cos(glat_r)*np.cos(glon_r),
+                               np.cos(glat_r)*np.sin(glon_r),
+                               np.sin(glat_r)]
+            # For each satellite, is it visible by any gateway?
+            gw_sees_sat = np.zeros(sat_norm.shape[0], dtype=bool)
+            for si in range(sat_norm.shape[0]):
+                for gi in range(len(gw_pairs)):
+                    cos_angle = np.dot(sat_norm[si], gw_cart[gi])
+                    elev = 90.0 - np.degrees(np.arccos(cos_angle))
+                    if elev > 5.0:  # gateway min elevation
+                        gw_sees_sat[si] = True
+                        break
+        else:
+            gw_sees_sat = np.ones(sat_norm.shape[0], dtype=bool)  # assume feeder OK
+
         for i in range(0, len(grid_points), chunk_size):
             end = min(i + chunk_size, len(grid_points))
             chunk_obs = obs_vecs[i:end]
             cos_sim = np.dot(chunk_obs, sat_norm.T)
             max_cos = np.max(cos_sim, axis=1)
             visible_mask = max_cos > min_cos_angle
-            coverage_counts[i:end] += visible_mask.astype(np.int32)
+            feeder_mask = np.any(gw_sees_sat[None, :], axis=1) if args.gateways else visible_mask
+            # two-link: user visible AND feeder link available
+            if args.gateways:
+                # Need at least one gateway that sees the sat
+                combined_mask = visible_mask.copy()
+                for si in range(sat_norm.shape[0]):
+                    if not gw_sees_sat[si]:
+                        # No gateway can reach this sat — remove coverage
+                        combined_mask = np.where(
+                            (cos_sim[:, si] > min_cos_angle) & ~gw_sees_sat[None, :],
+                            combined_mask,
+                            combined_mask
+                        )
+                # More efficient: sat is only useful if visible AND has feeder
+                sat_useful = visible_mask & gw_sees_sat.any()
+                coverage_counts[i:end] += sat_useful.astype(np.int32) if len(sat_useful.shape) > 1 else np.full(len(visible_mask), np.any(gw_sees_sat), dtype=np.int32)
+            else:
+                coverage_counts[i:end] += visible_mask.astype(np.int32)
 
         if (t_idx + 1) % 10 == 0:
             print(f"  Processed {t_idx + 1}/{steps} timesteps...")
