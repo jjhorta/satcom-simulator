@@ -107,6 +107,24 @@ def run_throughput(args):
     grid_points = np.column_stack([lat_grid.ravel(), lon_grid.ravel()])
     n_grid = len(grid_points)
     print(f"   Ground grid: {len(lats)} lat x {len(lons)} lon = {n_grid} points")
+    # ── Shape filter (optional) ──────────────────────────────
+    shape_path = getattr(args, 'shape', None)
+    if shape_path:
+        from ..grid import load_shape_geojson, filter_grid_by_shape
+        shape_data = load_shape_geojson(shape_path)
+        if shape_data:
+            grid_points = [{"lat": float(p[0]), "lon": float(p[1])} for p in grid_points]
+            grid_points = filter_grid_by_shape(grid_points, shape_data)
+            if len(grid_points) == 0:
+                print("  No grid points inside shape. Nothing to simulate.")
+                return
+            # Convert back to numpy for downstream computation
+            grid_points = np.array([[p["lat"], p["lon"]] for p in grid_points])
+            # Rebuild meshgrid if needed
+            lats = np.unique(grid_points[:, 0])
+            lons = np.unique(grid_points[:, 1])
+            lon_grid, lat_grid = np.meshgrid(lons, lats)
+    
 
     # Times
     timesteps = range(0, duration_min, step_min)

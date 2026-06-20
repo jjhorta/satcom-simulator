@@ -18,7 +18,7 @@ from sim.modes.orbit import view_orbit
 from sim.modes.track import view_track
 from sim.modes.route import run_route_analysis
 from sim.modes.throughput import run_throughput
-from sim.grid import generate_grid
+from sim.grid import generate_grid, filter_grid_by_shape, load_shape_geojson
 
 def main():
     parser = argparse.ArgumentParser(description="Satellite Constellation Radio Link Simulator - Combined")
@@ -70,6 +70,7 @@ def main():
     help='Semicolon-separated lat,lon for feeder-link gateways (e.g. "38.8,-9.38;32.63,-16.9")')
     heatmap_parser.add_argument('--bidi', action='store_true')
     heatmap_parser.add_argument('--res', type=float, default=5.0, help='Grid resolution in degrees')
+    heatmap_parser.add_argument('--shape', default=None, help='GeoJSON shape file to restrict analysis region')
     heatmap_parser.add_argument('--grid', default='latlon', choices=['latlon', 'h3'],
                                 help='Grid type: latlon (rectangular) or h3 (hexagonal)')
     heatmap_parser.add_argument('--h3-res', type=int, default=4,
@@ -98,6 +99,7 @@ def main():
     help='Semicolon-separated lat,lon for feeder-link gateways')
     heatmap_rf_parser.add_argument('--bidi', action='store_true')
     heatmap_rf_parser.add_argument('--res', type=float, default=5.0, help='Grid resolution in degrees')
+    heatmap_rf_parser.add_argument('--shape', default=None, help='GeoJSON shape file to restrict analysis region')
     heatmap_rf_parser.add_argument('--grid', default='latlon', choices=['latlon', 'h3'],
                                    help='Grid type: latlon (rectangular) or h3 (hexagonal)')
     heatmap_rf_parser.add_argument('--h3-res', type=int, default=4,
@@ -194,6 +196,7 @@ def main():
     throughput_parser.add_argument('--sso', action='store_true')
     throughput_parser.add_argument('--bidi', action='store_true')
     throughput_parser.add_argument('--res', type=float, default=5.0, help='Grid resolution in degrees')
+    throughput_parser.add_argument('--shape', default=None, help='GeoJSON shape file to restrict analysis region')
     throughput_parser.add_argument('--grid', default='latlon', choices=['latlon', 'h3'],
                                    help='Grid type: latlon (rectangular) or h3 (hexagonal)')
     throughput_parser.add_argument('--h3-res', type=int, default=4,

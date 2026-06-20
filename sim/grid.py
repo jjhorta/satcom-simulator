@@ -16,6 +16,13 @@ try:
 except ImportError:
     H3_AVAILABLE = False
 
+try:
+    from shapely.geometry import Point, Polygon as ShapelyPolygon, shape as shapely_shape
+    from shapely.prepared import prep
+    SHAPELY_AVAILABLE = True
+except ImportError:
+    SHAPELY_AVAILABLE = False
+
 
 def generate_grid(
     grid_mode: GridMode = "latlon",
@@ -260,3 +267,87 @@ class ShapeTool:
         tool = cls()
         tool.shapes = shapes
         return tool
+
+
+# ── Shape filtering ───────────────────────────────────────────────
+
+def load_shape_geojson(path: str) -> dict | None:
+    """Load a GeoJSON FeatureCollection or single Feature from file."""
+    import json
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        return data
+    except Exception as e:
+        print(f"  Could not load shape {path}: {e}")
+        return None
+
+
+def filter_grid_by_shape(
+    grid_points: list[dict],
+    shape_geojson: dict,
+    invert: bool = False,
+) -> list[dict]:
+    """
+    Filter grid points to only those INSIDE (or outside) a GeoJSON shape.
+
+    Args:
+        grid_points: List of dicts with 'lat', 'lon'
+        shape_geojson: GeoJSON FeatureCollection or Feature
+        invert: If True, return points OUTSIDE the shape
+
+    Returns:
+        Filtered list of grid points
+    """
+    if not SHAPELY_AVAILABLE:
+        print("  WARNING: shapely not installed. Using full grid.")
+        return grid_points
+
+    try:
+        # Normalise to list of features
+        if shape_geojson.get("type") == "FeatureCollection":
+            features = shape_geojson["features"]
+        elif shape_geojson.get("type") == "Feature":
+            features = [shape_geojson]
+        else:
+            print(f"  WARNING: Unknown GeoJSON type: {shape_geojson.get('type')}")
+            return grid_points
+
+        # Build a prepared multipolygon from all features
+        polygons = []
+        for feat in features:
+            try:
+                geom = shapely_shape(feat.get("geometry", {}))
+                if geom.geom_type in ("Polygon", "MultiPolygon"):
+                    polygons.append(geom)
+            except Exception:
+                continue
+
+        if not polygons:
+            print("  WARNING: No valid Polygon geometries found in shape")
+            return grid_points
+
+        # Union all polygons
+        if len(polygons) == 1:
+            boundary = polygons[0]
+        else:
+            from shapely.ops import unary_union
+            boundary = unary_union(polygons)
+
+        prepared = prep(boundary)
+        filtered = []
+        for pt in grid_points:
+            point = Point(pt["lon"], pt["lat"])
+            inside = prepared.contains(point)
+            if invert:
+                inside = not inside
+            if inside:
+                filtered.append(pt)
+
+        print(f"  Shape filter: {len(grid_points)} -> {len(filtered)} points "
+              f"({'inside' if not invert else 'outside'} shape)")
+        return filtered
+
+    except Exception as e:
+        print(f"  WARNING: Shape filtering failed: {e}. Using full grid.")
+        return grid_points
